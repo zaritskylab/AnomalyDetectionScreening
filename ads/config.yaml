@@ -1,0 +1,28 @@
+data_dir: /sise/assafzar-group/assafzar/genesAndMorph
+tb_logs_dir: logs/
+ckpt_dir: ckpt/
+model_name: autoencoder
+profile_type: normalized_variable_selected
+dataset: CDRP-bio
+save_top_k: 1
+max_epochs: 200
+gpus: 1
+use_16bit: False
+fast_dev_run: False
+lr: 0.005
+auto_lr_find: True
+test_split_ratio: 0.5
+latent_dim: 16
+#latent_dim:
+#    min: 8
+#    max: 24
+#    type: int
+l2_lambda: 0.025
+#l2_lambda:
+#    min: 0.001
+#    max: 0.3
+#    type: float
+batch_size: 512
+#    min: 64
+#    max: 256
+#    type: int

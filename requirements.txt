@@ -1,0 +1,9 @@
+markdown
+numpy
+pandas
+Pillow>=9.5.0
+pyyaml
+tqdm
+torch
+torchvision
+pytorch-lightning
