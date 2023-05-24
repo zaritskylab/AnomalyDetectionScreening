@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import torch
+from lightning.pytorch.tuner import Tuner
 from sklearn import preprocessing
 from torch.utils.data import Dataset, DataLoader
 from sklearn.model_selection import train_test_split
@@ -12,10 +13,12 @@ from sklearn.model_selection import GroupShuffleSplit
 from Model import TabularDataset, Autoencoder, AutoencoderModel
 import sys
 
-sys.path.insert(0, '../../2022_Haghighi_NatureMethods/utils/')
-print(sys.path)
-from readProfiles import *
-from pred_models import *
+# sys.path.insert(0, '../../2022_Haghighi_NatureMethods/utils/')
+# print(sys.path)
+# from dataset_paper_repo.utils.readProfiles import *
+# import dataset_paper_repo.utils.readProfiles
+# import dataset_paper_repo.utils.pred_models
+# from dataset_paper_repo.utils.pred_models import *
 from data_utils import load_data, split_train_test
 import os
 from typing import Dict, Union
@@ -23,8 +26,8 @@ import torch
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
-from pytorch_lightning.utilities.cli import LightningCLI
-from Model import TabularDataset, Autoencoder, AutoencoderModel
+
+# from pytorch_lightning.utilities.cli import LightningCLI
 
 
 def train_autoencoder(config: Dict[str, Union[str, float, int]]) -> pl.LightningModule:
@@ -74,18 +77,39 @@ def train_autoencoder(config: Dict[str, Union[str, float, int]]) -> pl.Lightning
     )
     progressbar_callback = TQDMProgressBar(refresh_rate=150)
     # Train model
+
+
     trainer = pl.Trainer(
         logger=logger,
         callbacks=[checkpoint_callback,early_stop_callback,progressbar_callback],
         max_epochs=config['max_epochs'],
-        gpus=config['gpus'],
-        auto_select_gpus=True,
+        accelerator="auto",
         # progress_bar_refresh_rate=50,
         precision=16 if config['use_16bit'] else 32,
         deterministic=True,
         fast_dev_run=config['fast_dev_run'],
-        auto_lr_find=config['auto_lr_find']
     )
+
+    # Run lr finder
+    # lr_finder = trainer.tuner.lr_find(model, ...)
+
+    tuner = Tuner(trainer)
+    # lr_finder = tuner.lr_find(model, dataloaders['train'],dataloaders['val'])
+
+    # Inspect results
+    # fig = lr_finder.plot()
+    # fig.show()
+    # suggested_lr = lr_finder.suggestion()
+    # hparams['lr']=suggested_lr
+
+    # batch_size_finder = tuner.scale_batch_size(model, dataloaders['train'],dataloaders['val'])
+    # fig = batch_size_finder.plot()
+    # fig.show()
+    # suggested_bs = batch_size_finder.suggestion()
+    # hparams['batch_size']=suggested_bs
+
+    model = AutoencoderModel(hparams)
+
     trainer.fit(model, dataloaders['train'],dataloaders['val'])
 
     # Test model

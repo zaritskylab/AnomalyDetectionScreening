@@ -7,3 +7,6 @@ tqdm
 torch
 torchvision
 pytorch-lightning
+scikit-learn
+tensorboard
+lightning

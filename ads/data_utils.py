@@ -1,8 +1,10 @@
 import os
 
-from readProfiles import read_replicate_level_profiles
+# from readProfiles import read_replicate_level_profiles
 from sklearn import preprocessing
 from sklearn.model_selection import GroupShuffleSplit
+from dataset_paper_repo.utils.readProfiles import read_replicate_level_profiles
+
 
 ds_info_dict={'CDRP':['CDRP-BBBC047-Bray',['Metadata_Sample_Dose','pert_sample_dose']],
               'CDRP-bio':['CDRPBIO-BBBC036-Bray',['Metadata_Sample_Dose','pert_sample_dose']],

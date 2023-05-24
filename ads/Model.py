@@ -7,12 +7,9 @@ from torch.utils.data import Dataset, DataLoader, random_split
 from sklearn.model_selection import train_test_split
 import pytorch_lightning as pl
 from pytorch_lightning import Trainer, seed_everything
-from pytorch_lightning.core.decorators import auto_move_data
 from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.callbacks import EarlyStopping
-from pytorch_lightning.utilities import AttributeDict
-from pytorch_lightning.utilities.cli import LightningCLI
-from pytorch_lightning.core.lightning import LightningModule
+# import lightning.pytorch as pl
 from torchmetrics.functional import pearson_corrcoef,r2_score
 # from pytorch_lightning.metrics.functional import mse
 
@@ -52,9 +49,11 @@ class Autoencoder(nn.Module):
     return x_recon, z
 
 
-class AutoencoderModel(LightningModule):
+class AutoencoderModel(pl.LightningModule):
   def __init__(self, hparams):
     super().__init__()
+    self.test_step_outputs = []
+
     self.save_hyperparameters(hparams)
 
     self.autoencoder = Autoencoder(
@@ -63,6 +62,7 @@ class AutoencoderModel(LightningModule):
     )
 
     self.l2_loss = nn.MSELoss(reduction='mean')
+
 
   def forward(self, x):
     x_recon, z = self.autoencoder(x)
@@ -104,20 +104,31 @@ class AutoencoderModel(LightningModule):
     r2 = r2_score(x_recon.reshape(-1), x.reshape(-1))
 
     loss = recon_loss + l2_reg
+    output = {
+      'mse_test': loss,
+      'l2_reg': l2_reg,
+      'x_recon': x_recon,
+      'z': z,
+      'pcc_test': pcc,
+      'r2_score': r2
+    }
 
+    self.test_step_outputs.append(output)
     # self.log('test_loss', recon_loss)
     # self.log_dict({"test_loss": recon_loss, "test_l2_loss": l2_reg})
 
     return {'mse_test': recon_loss, 'l2_reg':l2_reg, 'x_recon': x_recon, 'z': z, 'pcc_test':pcc, 'r2_score':r2}
 
-  def test_epoch_end(self, outputs):
-    mse_mean = torch.stack([x['mse_test'] for x in outputs]).mean()
-    pcc_mean = torch.stack([x['pcc_test'] for x in outputs]).mean()
-    r2_mean = torch.stack([x['r2_score'] for x in outputs]).mean()
+  def on_test_epoch_end(self):
 
-    x_recon = torch.cat([x['x_recon'] for x in outputs], dim=0)
-    z = torch.cat([x['z'] for x in outputs], dim=0)
+    mse_mean = torch.stack([x['mse_test'] for x in self.test_step_outputs]).mean()
+    pcc_mean = torch.stack([x['pcc_test'] for x in self.test_step_outputs]).mean()
+    r2_mean = torch.stack([x['r2_score'] for x in self.test_step_outputs]).mean()
 
+    x_recon = torch.cat([x['x_recon'] for x in self.test_step_outputs], dim=0)
+    z = torch.cat([x['z'] for x in self.test_step_outputs], dim=0)
+
+    self.test_step_outputs.clear()
     # self.logger.experiment.add_image('Reconstructed Images', x_recon, self.current_epoch)
     # self.logger.experiment.add_embedding(z, metadata=None, global_step=self.current_epoch)
 
