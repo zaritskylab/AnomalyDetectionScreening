@@ -7,3 +7,7 @@ tqdm
 torch
 torchvision
 pytorch-lightning
+scikit-learn
+tensorboard
+pycytominer
+scipy==1.8.0

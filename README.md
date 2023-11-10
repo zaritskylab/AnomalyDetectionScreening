@@ -29,9 +29,9 @@ conda activate pytorch_ads
 
 | System | GPU | Command |
 |--------|---------|---------|
-| Linux/WSL | NVIDIA | `pip3 install torch torchvision torchaudio` |
-| Linux | AMD | `pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm5.4.2` |
-| MacOS + MPS (untested) | Any | `pip3 install torch torchvision torchaudio` |
+| Linux/WSL | NVIDIA | `pip3 install torch torchvision` |
+| Linux | AMD | `pip3 install torch torchvision --index-url https://download.pytorch.org/whl/rocm5.4.2` |
+| MacOS + MPS (untested) | Any | `pip3 install torch torchvision` |
 
 The up-to-date commands can be found here: https://pytorch.org/get-started/locally/. 
 

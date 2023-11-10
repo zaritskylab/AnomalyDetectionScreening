@@ -1,0 +1,9 @@
+.ipynb_checkpoints/
+checkpoints/
+dataset_paper_repo/
+ads/logs/
+ads/ckpt/
+**/__pycache__/
+.vs_code/
+**/.ipynb_checkpoints/
+**.png
