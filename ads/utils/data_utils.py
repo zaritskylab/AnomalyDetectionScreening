@@ -1,6 +1,5 @@
 import os
 
-# from readProfiles import read_replicate_level_profiles
 import numpy as np
 import pandas as pd
 import pathlib as pathlib
@@ -10,9 +9,11 @@ from pycytominer.operations import variance_threshold, get_na_columns, correlati
 from sklearn import preprocessing
 from sklearn.model_selection import GroupShuffleSplit, StratifiedShuffleSplit, train_test_split,ShuffleSplit
 from torch.utils.data import DataLoader, Dataset
-from utils.readProfiles import read_replicate_level_profiles, save_profiles
+from utils.readProfiles import read_replicate_level_profiles, save_profiles, filter_data_by_highest_dose
 from utils.global_variables import DS_INFO_DICT
 from utils.file_utils import load_list_from_txt, save_list_to_txt
+from dataset_paper_repo.utils.normalize_funcs import standardize_per_catX
+
 #TODO: transform each dataset info to dicts
 # ds_info_dict={'CDRP':['CDRP-BBBC047-Bray',['Metadata_Sample_Dose','pert_sample_dose'],['Metadata_ASSAY_WELL_ROLE','mock'],'Metadata_Plate'],
 #               'CDRP-bio':['CDRPBIO-BBBC036-Bray',['Metadata_Sample_Dose','pert_sample_dose'],['Metadata_ASSAY_WELL_ROLE','mock'],'Metadata_Plate'],
@@ -115,13 +116,11 @@ def pre_process(data, configs, overwrite = False):
     features_path = os.path.join(configs.general.processed_data_dir, features_filename)
 
     if os.path.exists(features_path):
-      print('loading features from file...')
+      configs.general.logger.info('loading features from file...')
       features_selected = load_list_from_txt(features_path)
       cols_to_drop = [col for col in features if col not in features_selected]
       features = [col for col in features if col in features_selected]
       
-      
-
     else:
       # do feature selection - only only on mock data!!
       features, cols_to_drop = feature_selection(data[data[DS_INFO_DICT[configs.general.dataset][configs.data.modality]['role_col']] == DS_INFO_DICT[configs.general.dataset][configs.data.modality]['mock_val']],configs.data.corr_threshold,features)
@@ -132,14 +131,14 @@ def pre_process(data, configs, overwrite = False):
       print(f'cols removed: {cols_to_drop}')
 
 
-    print(f'number of features after feature selection: {len(features)}')
+    configs.general.logger.info(f'number of features after feature selection: {len(features)}')
     
     data.loc[:,features] = data.loc[:,features].interpolate()
     # if not os.path.exists(data_path): 
       # data.to_csv(data_path, compression='gzip')
       # configs.data.overwrite_data_creation = True
 
-  print(f'number of features for training is {len(features)}')
+  configs.general.logger.info(f'number of features for training is {len(features)}')
 
   # output_dir = os.path.join(configs.general.base_dir, 'anomaly_output', configs.general.dataset,'CellPainting',configs.general.exp_name)
   # os.makedirs(output_dir, exist_ok =True)
@@ -148,17 +147,12 @@ def pre_process(data, configs, overwrite = False):
   
   data.loc[:,features] = data.loc[:,features].interpolate()
 
-  if not os.path.exists(train_path) or configs.data.overwrite_data_creation:
+  save_data_flag = not os.path.exists(train_path) or configs.data.overwrite_data_creation
+
+  if save_data_flag or configs.data.run_data_process:
 
     # split data with equal samples from different plates (DS_INFO_DICT[configs.general.dataset[3]])
     data_splitted = split_data(data, configs.general.dataset, configs.data.test_split_ratio, modality=configs.data.modality)
-
-    # datasets_pre_normalization = {
-    #   'train': data_splitted.loc[data_splitted['Metadata_set'] == 'train', :],
-    #   'val': data_splitted.loc[data_splitted['Metadata_set'] == 'val', :],
-    #   'test_ctrl': data_splitted.loc[data_splitted['Metadata_set'] == 'test_ctrl', :],
-    #   'test_treat': data_splitted.loc[data_splitted['Metadata_set'] == 'test_treat', :]
-    # }
 
     print('normalizing to training set...')
 
@@ -170,20 +164,26 @@ def pre_process(data, configs, overwrite = False):
     print(f'number of features training data: {len(normalized_df_by_train.columns)}')
 
     # filename = f'replicate_level_cp_{configs.data.profile_type}_normalized_by_train'
-
-    save_profiles(normalized_df_by_train, configs.general.output_exp_dir, train_filename)
+    if not configs.general.debug_mode:
+      save_profiles(normalized_df_by_train, configs.general.output_exp_dir, train_filename)
 
     raw_filename = f'replicate_level_{configs.data.modality_str}_{configs.data.profile_type}_baseline'
     raw_path = os.path.join(os.path.join(configs.general.output_exp_dir, raw_filename))
-    if not os.path.exists(raw_path) or configs.data.overwrite_data_creation:
+
+    save_data_flag = not os.path.exists(raw_path) or configs.data.overwrite_data_creation
+
+    if save_data_flag or configs.data.run_data_process:
 
       print('calclating raw measurements...')
-
-      raw_data, _ = normalize(data_splitted,features, configs.data.modality, normalize_condition = 'test_ctrl',plate_normalized=1, norm_method = "standardize", remove_non_normal_features = False, clip_outliers=False)
+      # train_val_indices = data_splitted['Metadata_set'].isin(['train','val'])
+      test_indices = data_splitted['Metadata_set'].isin(['test_ctrl','test_treat'])
+      test_data = data_splitted.loc[test_indices, :]
+      raw_data, _ = normalize(test_data,features, configs.data.modality, normalize_condition = 'test_ctrl',plate_normalized=1, norm_method = "standardize", remove_non_normal_features = False, clip_outliers=False)
       # test_raw_data = raw_data.loc[raw_data['Metadata_set'] == 'test_treat', :]
-      save_profiles(raw_data, configs.general.output_exp_dir, raw_filename)
-      # test_raw_unchanged = data_splitted.loc[data_splitted['Metadata_set'] == 'test_treat', :]
-      save_profiles(data_splitted, configs.general.output_exp_dir, f'replicate_level_{configs.data.modality_str}_{configs.data.profile_type}_baseline_unchanged')
+      if save_data_flag:
+        save_profiles(raw_data, configs.general.output_exp_dir, raw_filename)
+        # test_raw_unchanged = data_splitted.loc[data_splitted['Metadata_set'] == 'test_treat', :]
+        save_profiles(data_splitted, configs.general.output_exp_dir, f'replicate_level_{configs.data.modality_str}_{configs.data.profile_type}_baseline_unchanged')
       print(f'number of features raw data: {len(raw_data.columns)}')
 
   else:
@@ -207,6 +207,8 @@ def split_data(data_preprocess, dataset, test_split_ratio, val_split_ratio=.2, m
     else:
       pertColName = 'pert_id'
     # control_data = data_preprocess[data_preprocess[ds_info_dict[dataset][2][0]] == ds_info_dict[dataset][2][1]]
+    if dataset == 'TAORF':
+      control_data = data_preprocess[data_preprocess[DS_INFO_DICT[dataset][modality]['role_col']].isin(['CTRL','Untreated'])] 
     control_data = data_preprocess[data_preprocess[DS_INFO_DICT[dataset][modality]['role_col']] == DS_INFO_DICT[dataset][modality]['mock_val']]
     # split data with equal samples from different plates (DS_INFO_DICT[configs.general.dataset[3]])
     splitter = StratifiedShuffleSplit(test_size=test_split_ratio, n_splits=1)
@@ -236,7 +238,13 @@ def split_data(data_preprocess, dataset, test_split_ratio, val_split_ratio=.2, m
     data_splitted.loc[train_data.index.values, 'Metadata_set'] = 'train'
     data_splitted.loc[val_data.index.values, 'Metadata_set'] = 'val'
     data_splitted.loc[test_data_mocks.index.values, 'Metadata_set'] = 'test_ctrl'
-    data_splitted.loc[data_splitted[DS_INFO_DICT[dataset][modality]['role_col']] != DS_INFO_DICT[dataset][modality]['mock_val'], 'Metadata_set'] = 'test_treat'
+    # treat_indices = data_splitted[DS_INFO_DICT[dataset][modality]['role_col']] != DS_INFO_DICT[dataset][modality]['mock_val']
+    if dataset == 'TAORF':
+      treat_indices = (data_splitted[DS_INFO_DICT[dataset][modality]['role_col']] != 'Untreated') & (data_splitted[DS_INFO_DICT[dataset][modality]['role_col']] != 'CTRL')
+    else:
+      treat_indices = data_splitted[DS_INFO_DICT[dataset][modality]['role_col']] != DS_INFO_DICT[dataset][modality]['mock_val']
+    
+    data_splitted.loc[treat_indices, 'Metadata_set'] = 'test_treat'
 
     return data_splitted
 
@@ -276,14 +284,14 @@ def scale_data_by_set(scale_by, sets, features):
 #   else:
 #     return scaler.transform(sets_to_scale[features].values.astype('float64')).fillna(0)
 
-def remove_null_features(data, features,null_vals_ratio = 0.05):
+# def remove_null_features(data, features,null_vals_ratio = 0.05):
   
-  cols2remove_manyNulls = [i for i in features if
-                            (data[i].isnull().sum(axis=0) / data.shape[0]) \
-                            > null_vals_ratio]
-  data = data.drop(cols2remove_manyNulls, axis=1)
+#   cols2remove_manyNulls = [i for i in features if
+#                             (data[i].isnull().sum(axis=0) / data.shape[0]) \
+#                             > null_vals_ratio]
+#   data = data.drop(cols2remove_manyNulls, axis=1)
 
-  return data
+#   return data
 
 def feature_selection(data, corr_threshold=0.95, features=None):
     """
@@ -348,18 +356,18 @@ def feature_selection(data, corr_threshold=0.95, features=None):
     return cp_features, cols2removeCP
 
 
-def get_highly_correlated_features(data, features,corr_threshold=0.9):
+# def get_highly_correlated_features(data, features,corr_threshold=0.9):
 
-    # Compute the correlation matrix
-    corr_matrix = data[features].corr(method='pearson').abs()
+#     # Compute the correlation matrix
+#     corr_matrix = data[features].corr(method='pearson').abs()
 
-    # get upper triangle of correlation matrix
-    upper = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
+#     # get upper triangle of correlation matrix
+#     upper = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
 
-    # find features with correlation greater than 0.95
-    to_drop = [column for column in upper.columns if any(upper[column] > corr_threshold)]
+#     # find features with correlation greater than 0.95
+#     to_drop = [column for column in upper.columns if any(upper[column] > corr_threshold)]
 
-    return to_drop
+#     return to_drop
 
 
 ##########################################################
@@ -437,6 +445,10 @@ def normalize(df, features,modality,dataset='CDRP-bio', normalize_condition = "t
     isna = normalized_df[features].isna().sum().sum()/(normalized_df.shape[0]*len(features))
     print(f'ratio of null values after normalization: {isna}')
     normalized_df.loc[:,features] = normalized_df.loc[:,features].interpolate()
+    isna = normalized_df[features].isna().sum().sum()
+    if isna > 0:
+      raise ValueError('null values after interpolation')
+
     if remove_non_normal_features:
       print(f'number of features before feature selection of only normally distributed features: {len(features)}')
       mean_condition = normalized_df[features].abs().mean()>1000
@@ -444,10 +456,11 @@ def normalize(df, features,modality,dataset='CDRP-bio', normalize_condition = "t
       normalized_df = normalized_df.drop(cols_to_remove, axis=1)
       features, meta_features = get_features(normalized_df)
       print(f'number of features after feature selection of only normally distributed features: {len(features)}')
-      return normalized_df, cols_to_remove
+      # return normalized_df, cols_to_remove
     else:
       cols_to_remove = None
-      return normalized_df, cols_to_remove
+
+    return normalized_df, cols_to_remove
 
 ##########################################################
 
@@ -463,8 +476,10 @@ def get_features(df, modality = 'CellPainting'):
   # features = df.columns[df.columns.str.contains("Cells_|Cytoplasm_|Nuclei_")].tolist()
   return features, meta_features
 
+##########################################################
 
-def list_columns(df):
+
+def list_cp_columns_type(df):
     """
     This function split the plate's columns to different lists
     general columns, correlation columns and a dictionary channel -> channel columns
@@ -489,12 +504,73 @@ def set_index_fields(df, dataset, index_fields=None,by_dose = False, modality='C
     
     if modality == 'CellPainting':
       if index_fields is None:
-          index_fields = ['Metadata_Plate', DS_INFO_DICT[dataset][modality]['role_col'], DS_INFO_DICT[dataset][modality][ind_col], 
-          'Metadata_mmoles_per_liter','Metadata_Well']
+          index_fields = ['Metadata_Plate', DS_INFO_DICT[dataset][modality]['role_col'], DS_INFO_DICT[dataset][modality][ind_col], 'Metadata_Well']
     else:
           index_fields = ['det_plate', DS_INFO_DICT[dataset][modality][ind_col],
                           'pert_dose']
+    
+
     df = df.set_index(
         index_fields)
     return df
+
+
+def load_zscores(methods,base_dir,dataset, profile_type,normalize_by_all=False,by_dose=False,z_trim=None,sample='treated',set_index=True,debug=False, filter_by_highest_dose=False):
+
+    for m in methods.keys():
+      print(f'loading zscores for method: {m}')
+      if m == 'l1k':
+          methods[m]['modality'] ='L1000'
+        #   def load_data(base_dir,dataset, profile_type,plate_normalize_by_all = False, modality = 'CellPainting'):
+
+          zscores, features = load_data(base_dir,dataset, profile_type,modality=methods[m]['modality'], plate_normalize_by_all =normalize_by_all)
+          if debug:
+            zscores = zscores.sample(2000)
+          methods[m]['features']=list(features)
+          
+          # methods[m]['zscores'] = zscores.loc[:,methods[m]['features']]
+      else:
+          methods[m]['modality']='CellPainting'
+          zscores = pd.read_csv(methods[m]['path'], compression = 'gzip', low_memory=False)   
+          if debug:
+            zscores = zscores.sample(2000)  
+          if m == 'anomaly_emb':
+              meta_features = [c for c in zscores.columns if 'Metadata_' in c]
+              features = [c for c in zscores.columns if 'Metadata_' not in c]
+          else:
+              features = zscores.columns[zscores.columns.str.contains("Cells_|Cytoplasm_|Nuclei_")]
+          methods[m]['features']=list(features)
+
+          if normalize_by_all:
+              zscores = standardize_per_catX(zscores,DS_INFO_DICT[dataset]['CellPainting']['plate_col'],methods[m]['features'])
+      # zscores = zscores.query(f"{DS_INFO_DICT[dataset][methods[m]['modality']]['role_col']} != '{DS_INFO_DICT[dataset][methods[m]['modality']]['mock_val']}' ")
+
+      # zscores = zscores.query('Metadata_ASSAY_WELL_ROLE == "treated"')
+      if sample=='treated':
+        zscores = zscores.query(f"{DS_INFO_DICT[dataset][methods[m]['modality']]['role_col']} != '{DS_INFO_DICT[dataset][methods[m]['modality']]['mock_val']}' ")
+
+        
+      elif sample=='mock':
+        zscores = zscores.query(f"{DS_INFO_DICT[dataset][methods[m]['modality']]['role_col']} == '{DS_INFO_DICT[dataset][methods[m]['modality']]['mock_val']}' ")
+      elif sample=='all':
+        pass
+      else:
+        raise ValueError(f'invalid sample type: {sample}')
+
+      if z_trim is not None:
+          zscores[features] = zscores.loc[:,features].clip(-z_trim, z_trim)
+      
+      if not by_dose and filter_by_highest_dose and DS_INFO_DICT[dataset]['has_dose']:
+        trt_indices = zscores[DS_INFO_DICT[dataset][methods[m]['modality']]['role_col']] != DS_INFO_DICT[dataset][methods[m]['modality']]['mock_val']
+        treated_zscores = filter_data_by_highest_dose(zscores.loc[trt_indices,:], dataset, modality=methods[m]['modality']).reset_index(drop=True)
+        mock_zscores = zscores.loc[~trt_indices,:].reset_index(drop=True)
+        zscores = pd.concat([mock_zscores, treated_zscores]).reset_index(drop=True)
+
+      if set_index:
+        zscores = set_index_fields(zscores,dataset,by_dose=by_dose, modality=methods[m]['modality'])
+        methods[m]['zscores'] = zscores.loc[:,methods[m]['features']]
+      else:
+        methods[m]['zscores'] = zscores
+
+    return methods
 

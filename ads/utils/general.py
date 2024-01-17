@@ -20,8 +20,6 @@ from argparse import ArgumentParser
 from pytorch_lightning import seed_everything
 
 
-
-
 ################################################################################
 
 def revise_exp_name(configs):
@@ -33,6 +31,11 @@ def revise_exp_name(configs):
         configs.general.exp_name += f'_l2_{configs.model.l2_lambda}'
     if configs.model.deep_decoder:
         configs.general.exp_name += f'_dd'
+        
+    if configs.model.encoder_type == 'shallow':
+        configs.general.exp_name += f'_se'
+    elif configs.model.encoder_type == 'deep':
+        configs.general.exp_name += f'_de'
     return configs.general.exp_name 
 
 ################################################################################
@@ -48,7 +51,7 @@ def add_exp_suffix(profile_type, by_dose,normalize_by_all=False):
     if by_dose:
         suffix+= '_d'
     if normalize_by_all:
-        suffix+= '_nba'
+        suffix+= '_ba'
         
     return suffix
 
@@ -89,7 +92,9 @@ def get_configs(exp_dir):
     
     if os.path.exists(config_path):  
         parser = ArgumentParser()
-        args = parser.parse_args()  
+
+        args, unknown = parser.parse_known_args()
+        # args = parser.parse_args()  
 
         with open(config_path, 'r') as f:
             args.__dict__ = json.load(f)
@@ -97,17 +102,19 @@ def get_configs(exp_dir):
             # configs = json.load(f)
     else:
         return None
-    return configs
+    return args
 
 ################################################################################
 
-def set_configs_jupyter():
+def set_configs_jupyter(exp_name = ''):
 
-    parser = transformers.HfArgumentParser((GeneralArguments, DataArguments,ModelArguments, EvalArguments))
+    parser = transformers.HfArgumentParser((GeneralArguments, DataArguments,ModelArguments, EvalArguments,MoaArguments))
     general_args = GeneralArguments()
     data_args = DataArguments()
     model_args = ModelArguments()
     eval_args = EvalArguments()
+    moa_args = MoaArguments()
+
     # general_args, data_args,model_args, eval_args = parser.parse_args_into_dataclasses()
     # general_args, data_args,model_args, eval_args = parser.parse_known_args()
     # configs = set_paths(configs)
@@ -116,13 +123,27 @@ def set_configs_jupyter():
 
 
     # cpds_med_scores, null_distribution_medians = calc_reproducibility(configs)
-    general_args.flow
+    # general_args.flow
     configs = argparse.Namespace(**{
             'general': general_args,
             'model': model_args,
             'data': data_args,
-            'eval':eval_args
+            'eval':eval_args,
+            'moa':moa_args
         })
+    
+    if len(exp_name)>0:
+        configs.general.exp_name = exp_name
+    exp_name = revise_exp_name(configs)
+    configs.general.exp_name = exp_name
+    # configs = set_paths(configs)
+
+    # configs_from_file = get_configs(configs.general.output_exp_dir)
+    # if configs_from_file is not None:
+    #     configs = configs_from_file
+
+    set_seed(configs.general.seed)
+    
     return configs
 
 def set_logger(configs):

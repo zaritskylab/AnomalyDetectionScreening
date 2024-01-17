@@ -10,9 +10,9 @@ from sklearn.metrics import f1_score
 from sklearn.utils import class_weight
 from sklearn.naive_bayes import GaussianNB,ComplementNB
 from sklearn.metrics import accuracy_score
-from sklearn.model_selection import KFold
-from sklearn.model_selection import cross_val_score, cross_val_predict, GroupKFold,StratifiedGroupKFold
+from sklearn.model_selection import cross_val_score, cross_val_predict, GroupKFold,StratifiedGroupKFold,GridSearchCV,KFold
 from sklearn.neural_network import MLPClassifier
+
 from imblearn.over_sampling import RandomOverSampler
 import pandas as pd
 from tqdm import tqdm
@@ -23,7 +23,9 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import pairwise_distances,mean_absolute_error, mean_squared_error
 
+import matplotlib.pyplot as plt
 import pickle
+
 currentdir = '/sise/home/alonshp/AnomalyDetectionScreening'
 print(currentdir)
 
@@ -35,18 +37,23 @@ sys.path.insert(0, currentdir)
 from utils.general import revise_exp_name, set_configs, set_paths,set_seed, add_exp_suffix
 from utils.global_variables import DS_INFO_DICT, ABRVS
 from utils.data_utils import set_index_fields
-from utils.readProfiles import get_cp_path, get_cp_dir, read_paired_treatment_level_profiles, read_treatment_level_profiles
+# from utils.eval_utils import filter_data_by_highest_dose
+from utils.readProfiles import get_cp_path, get_cp_dir, read_paired_treatment_level_profiles, read_treatment_level_profiles, filter_data_by_highest_dose
 from utils.reproduce_funcs import get_median_correlation, get_duplicate_replicates, get_replicates_score
 from utils.general import saveAsNewSheetToExistingFile, write_dataframe_to_excel
 from utils.file_utils import load_df_pickles_and_concatenate
 from dataset_paper_repo.utils.normalize_funcs import standardize_per_catX
 
 
-
 ############################################################################################################
 
 
 def main(configs, data_reps = None):
+
+    if data_reps is None:
+        Types = ['baseline','ae_diff']
+        data_reps = [f'{configs.data.profile_type}_{t}' for t in Types]
+        
 
     if configs.general.flow in ['run_moa']:
         run_classifier(configs, data_reps = data_reps)
@@ -69,12 +76,13 @@ def concat_exps_results(configs, data_reps = None):
         ]
     else:
         filter_combs =  [['CP','l1k']]
+
     for fg in filter_combs:
         configs.moa.filter_groups = fg
         moa_csv_fileName, exp_suffix, filter_abrv = get_moa_filename(configs.data.profile_type, configs.eval.by_dose, configs.moa.filter_groups, configs.moa.folds, configs.moa.min_samples,configs.eval.normalize_by_all)
 
         save_dir = os.path.join(configs.general.res_dir,'MoAprediction', moa_csv_fileName)
-        os.makedirs(save_dir,exist_ok=True)
+        # os.makedirs(save_dir,exist_ok=True)
         save_path = os.path.join(save_dir, 'pred_moa_res_all.xlsx')
 
         dirs = glob.glob(f'{configs.general.res_dir}/MoAprediction/{moa_csv_fileName}/*')
@@ -90,14 +98,42 @@ def concat_exps_results(configs, data_reps = None):
 
 
 def get_moa_filename(profile_type, by_dose, filter_groups, folds, min_samples,normalize_by_all):
+
     filter_abrv = ''
     for f in filter_groups:
         filter_abrv += f[0].lower()
     # filter_abrv = [configs.moa.filter_groups[i][0] for i in range(len(configs.moa.filter_groups))]
     exp_suffix = add_exp_suffix(profile_type=profile_type,by_dose= by_dose, normalize_by_all=normalize_by_all)
+    
     exp_params_str = f'n{min_samples}_f{folds}{exp_suffix}_{filter_abrv}'
-    moa_csv_fileName = f'{profile_type}_{exp_params_str}'
-    return moa_csv_fileName, exp_suffix, filter_abrv
+    exp_fileName = f'{profile_type}_{exp_params_str}'
+    return exp_fileName, exp_suffix, filter_abrv
+
+############################################################################################################
+
+def get_filters_abrv(filter_groups):
+
+    filter_abrv = ''
+    for f in filter_groups:
+        filter_abrv += f[0].lower()
+    return filter_abrv
+
+############################################################################################################
+
+def get_filter_rep_params(dataset, exp_suffix,repCorrFilePath, filter_groups,filter_perts= 'highRepUnion'):
+    sheet_names = []
+    if 'CP' in filter_groups:
+        # filter_perts = 'onlyCP'
+        sheet_names.append(f'CP-{dataset.lower()}{exp_suffix}')
+    if 'anomalyCP' in filter_groups:
+        sheet_names.append(f'anomalyCP-{dataset.lower()}{exp_suffix}')
+    if 'l1k' in filter_groups:
+        #TODO: add l1k by dose and not only general
+        sheet_names.append(f'l1k-{dataset.lower()}{exp_suffix}')
+
+    filter_repCorr_params=[filter_perts,repCorrFilePath, sheet_names]
+
+    return filter_repCorr_params
 
 ############################################################################################################
 
@@ -105,8 +141,12 @@ def run_classifier(configs, data_reps = None):
 
     # repCorrFilePath=f'{configs.general.res_dir}/{rep_corr_fileName}.xlsx'
     # repCorrFilePath=f'{base_dir}/RepCorrDF_{profileType}.xlsx'
-
+    
     # if filter_perts=='onlyCP':  
+    if data_reps is None:
+        Types = ['ae_diff', 'baseline']
+        data_reps = [f'{configs.data.profile_type}_{t}' for t in Types]
+
     repCorrFilePath=f'{configs.general.res_dir}/{configs.moa.rep_corr_fileName}.xlsx'
     # else:
         # repCorrFilePath=f'{configs.general.base_dir}/results/RepCorrDF.xlsx'
@@ -120,7 +160,9 @@ def run_classifier(configs, data_reps = None):
             # ['CP','anomalyCP'],
             ['CP','l1k'],
             ['anomalyCP','l1k'],
-            ['CP','anomalyCP','l1k']
+            ['CP','anomalyCP','l1k'],
+            ['CP'],
+            ['anomalyCP']
         ]
     else:
         filter_combs =  [['CP','l1k']]
@@ -128,25 +170,15 @@ def run_classifier(configs, data_reps = None):
     for fg in filter_combs:
 
         configs.moa.filter_groups = fg
+
         moa_csv_fileName, exp_suffix, filter_abrv = get_moa_filename(configs.data.profile_type, configs.eval.by_dose, configs.moa.filter_groups, configs.moa.folds, configs.moa.min_samples,configs.eval.normalize_by_all)
-        moa_dir = os.path.join(configs.general.res_dir,'MoAprediction')
+        filter_repCorr_params = get_filter_rep_params(configs.general.dataset, exp_suffix,repCorrFilePath, configs.moa.filter_groups,filter_perts= configs.moa.filter_perts)
+
+        moa_dir = os.path.join(configs.general.res_dir,configs.moa.moa_dirname)
         summary_csv_path = os.path.join(moa_dir, 'moa_summary.xlsx')
-        save_dir = os.path.join(configs.general.res_dir,'MoAprediction', moa_csv_fileName)
+        save_dir = os.path.join(moa_dir, moa_csv_fileName)
         os.makedirs(save_dir,exist_ok=True)
         save_path = os.path.join(save_dir, 'pred_moa_res.xlsx')
-
-        sheet_names = []
-        if 'CP' in configs.moa.filter_groups:
-            # filter_perts = 'onlyCP'
-            sheet_names.append(f'CP-{configs.general.dataset.lower()}{exp_suffix}')
-        if 'anomalyCP' in configs.moa.filter_groups:
-            sheet_names.append(f'anomalyCP-{configs.general.dataset.lower()}{exp_suffix}')
-        if 'l1k' in configs.moa.filter_groups:
-            #TODO: add l1k by dose and not only general
-            sheet_names.append(f'l1k-{configs.general.dataset.lower()}{exp_suffix}')
-    # f'{m}-{datasets[0].lower()}'
-        filter_repCorr_params=[configs.moa.filter_perts,repCorrFilePath, sheet_names]
-
         # filter_repCorr_params=[filter_perts,repCorrFilePath]
 
         ################################################
@@ -161,7 +193,7 @@ def run_classifier(configs, data_reps = None):
         profTypeAbbrev = [ABRVS[profileType] for profileType in data_reps]
 
         # try:
-        methods, filteredMOAs = load_data_for_moa_prediction(configs, data_reps, filter_repCorr_params)
+        methods, filteredMOAs = load_data_filtered_by_rep_corr(configs, data_reps, filter_repCorr_params,run_l1k=configs.moa.run_l1k)
         # except:
             # print(f'failed to load data for moa prediction for {exp_suffix}')
             # return
@@ -170,18 +202,39 @@ def run_classifier(configs, data_reps = None):
             # methods = create_fused_ad_rep(configs, methods)
             profTypeAbbrev.append(f'fuse')
 
-        tune=False
+        
         # # logo = LeaveOneGroupOut()
 
         test_index_gen = []
         res= {}
 
+        if configs.moa.tune:
+
+            parameter_space_MLP = {
+                'hidden_layer_sizes': [(256,),(128,),(64), (128,64),(256,64), (128,32), (64,16),(128,64,32),(256,128,64)],
+                'activation': ['tanh', 'relu'],
+                'alpha': [0.0001,0.05],
+                'learning_rate': ['constant','adaptive'],
+                'random_state': [configs.moa.exp_seed]
+            }
+
+            parameter_space_logistic={"C":[1,10,100],
+            'random_state': [configs.moa.exp_seed]
+            }
+            
+        coefs_all_cvs = {}
+        coefs_all = {}
+
         for j, p in enumerate(methods.keys()):
+            # coefs[p] = {}
+            coefs_all_cvs[p] = pd.DataFrame()
+            coefs_all[p] = []
             for cls_model in ['lr','mlp']:
 
             # for cls_model in ['lr','mlp','xgboost']:
             # for cls_model in ['xgboost']:
-                
+                # coefs_all_cvs = pd.DataFrame()
+
                 moa_pred_res=pd.DataFrame(index=filteredMOAs.index,columns=['CP','GE','Early Fusion',
                                 # 'RGCCA_CP','RGCCA_GE','RGCCA_EarlyFusion',
                                 'Late Fusion',
@@ -230,31 +283,42 @@ def run_classifier(configs, data_reps = None):
                     sm1=RandomOverSampler(sampling_strategy='not majority',random_state=configs.moa.exp_seed)
 
                     probs=[]
+                    if configs.moa.run_l1k:
+                        reps_for_training = ['CP','Early Fusion','GE']
+                    else:
+                        reps_for_training = ['CP','Early Fusion']
 
-                    for n,dt_modality,col in zip([0,1,2,3],methods[p]["data4eval"],['CP','GE','Early Fusion','Fold']):
+                    for n,dt_modality,col in zip([0,1,2,3],methods[p]["data4eval"],reps_for_training):
                                                                         #   'RGCCA_CP',\
                                 # 'RGCCA_GE','RGCCA_EarlyFusion',
+                        # if col =='GE' and n>0:
+                            # continue
                         print(f'training represntation {p} on modality {col} with model {cls_model} fold {i}')
+
                         data_m=dt_modality[0]
 
                         dt_train=data_m.loc[train_index,dt_modality[1]].values;
                         dt_test=data_m.loc[test_index,dt_modality[1]].values; 
 
                         if cls_model=='lr':            
-                            # if tune:
-                                # model_logistic = LogisticRegression(multi_class='multinomial',class_weight="balanced",n_jobs=4) 
-                                # model_tr = GridSearchCV(model_logistic, parameter_space_logistic, n_jobs=4, cv=3)
-                            # else:
-                            model_tr = LogisticRegression(multi_class='multinomial',class_weight="balanced", max_iter=500) 
+                            if configs.moa.tune:
+                                if (configs.moa.tune_first_fold and i==1) or not configs.moa.tune_first_fold:
+                                    # if (configs.moa.tune_first_fold and i==1) or not configs.moa.tune_first_fold:
+                                    model_logistic = LogisticRegression(random_state=configs.moa.exp_seed,multi_class='multinomial',class_weight="balanced",n_jobs=4, max_iter=1000) 
+                                    model_tr = GridSearchCV(model_logistic, parameter_space_logistic, n_jobs=4, cv=5)
+                                # else:
+                            elif not configs.moa.tune:
+                                model_tr = LogisticRegression(multi_class='multinomial',class_weight="balanced", max_iter=1000, random_state=configs.moa.exp_seed) 
 
                         elif cls_model=='mlp':
                 #             model_MLP = MLPClassifier(random_state=5,max_iter=100,alpha=0.0001,activation='tanh')
-                            if tune:
-                                model_MLP = MLPClassifier(random_state=5,max_iter=600)
-                                model_tr = GridSearchCV(model_MLP, parameter_space_MLP, n_jobs=4, cv=3)
-                            else:
+                            if configs.moa.tune:
+                                if (configs.moa.tune_first_fold and i==1) or not configs.moa.tune_first_fold:
+                                    model_MLP = MLPClassifier(random_state=configs.moa.exp_seed,max_iter=1000)
+                                    model_tr = GridSearchCV(model_MLP, parameter_space_MLP, n_jobs=4, cv=5)
+                            elif not configs.moa.tune:
                                 # model_tr = MLPClassifier(random_state=5,max_iter=200,alpha=0.0001,activation='tanh')
-                                model_tr = MLPClassifier(random_state=configs.moa.exp_seed,max_iter=600,alpha=0.0001,activation='relu',hidden_layer_sizes=(200,),learning_rate='constant')
+                                model_tr = MLPClassifier(random_state=configs.moa.exp_seed,max_iter=1000,alpha=0.0001,activation='relu',hidden_layer_sizes=(200,),learning_rate='constant')
                         # elif cls_model=='mlp_torch':
                         elif cls_model=='mlp_pytorch':
                             # trainer.fit(model=model, datamodule=datamodule)
@@ -278,22 +342,30 @@ def run_classifier(configs, data_reps = None):
                             
                         accc=model_tr.score(dt_test,labels_test)
                         print("Test score: %f" % accc)
+                        if cls_model=='lr' and col == 'CP':
+                            # print(model_tr.coef_)
+                            coefs = model_tr.best_estimator_.coef_
+                            coefs_all[p].append(coefs)
+                            coefs_mean = abs(coefs.mean(axis=0))
+                            coefs_mean = coefs_mean / np.sum(coefs_mean)
+                            coefs = pd.DataFrame(coefs_mean.reshape(1,len(dt_modality[1])), columns = dt_modality[1], index = ['Fold_'+str(i)])
+                            coefs_all_cvs[p] = pd.concat([coefs_all_cvs[p], coefs], axis=1)
                         # print(model_tr.predict(dt_test))
                         # accc=f1_score(labels_test,model_tr.predict(dt_test), average='weighted')        
                         moa_pred_res.loc[test_index,col]=model_tr.predict(dt_test)
                 #         moa_pred_res.loc[filteredMOAs.loc[test_index,'Compounds'].unique()[0],col]=accc*100
                         probs.append(model_tr.predict_proba(dt_test))
 
+                    if configs.moa.run_l1k:
+                        prob_sum = probs[0]
+                        for pro in range(1,len(probs)):
+                            prob_sum+=probs[pro]                    
+                        labels_lateFusion=model_tr.classes_[np.argmax(prob_sum/len(probs),axis=1)]
+                        moa_pred_res.loc[test_index,'Late Fusion']=labels_lateFusion
 
-                #     labels_lateFusion=list(np.argmax((probs[0]+probs[1])/2,axis=1))
-                    prob_sum = probs[0]
-                    for pro in range(1,len(probs)):
-                        prob_sum+=probs[pro]
-                    labels_lateFusion=model_tr.classes_[np.argmax(prob_sum/len(probs),axis=1)]
-                    moa_pred_res.loc[test_index,'Late Fusion']=labels_lateFusion
                     moa_pred_res.loc[test_index,'Metadata_moa_num']=labels_test
 
-                    del model_tr
+                    # del model_tr
                     if 'torch' in cls_model:
                         torch.cuda.empty_cache()
                         
@@ -304,11 +376,16 @@ def run_classifier(configs, data_reps = None):
                 moa_pred_res['Metadata_moa_with_n']=moa_pred_res.Metadata_moa_with_n.apply(lambda x: int(x[0]) if type(x)==list else x)    
                 moa_pred_res['exp_num']=configs.general.exp_num
                 # print(moa_pred_res.mean())
-                # if tune:
-                tuneStr=''
+                if configs.moa.tune:
+                    if configs.moa.tune_first_fold:
+                        tuneStr='-t'
+                    else:
+                        tuneStr='-ta'
+                else:
+                    tuneStr=''
                 
                 profile_abrv = profTypeAbbrev[j]
-                sheetname = f'{profile_abrv}-{cls_model}'
+                sheetname = f'{profile_abrv}-{cls_model}{tuneStr}'
                 
                 f1_exp_name = f'{moa_csv_fileName}-{cls_model}'
                 f1s = compute_f1_scores(moa_pred_res)
@@ -340,6 +417,7 @@ def run_classifier(configs, data_reps = None):
 
                 if not configs.general.debug_mode:
                     
+                    # save slice_id results to pickle
                     pkl_dir = f'{save_dir}/{sheetname}'
                     os.makedirs(pkl_dir,exist_ok=True)
                     cur_dest = os.path.join(pkl_dir,f'{configs.general.exp_num}.pickle')
@@ -349,17 +427,50 @@ def run_classifier(configs, data_reps = None):
 
                     write_dataframe_to_excel(save_path,sheetname,moa_pred_res,append_new_data_if_sheet_exists=True)
                     write_dataframe_to_excel(summary_csv_path,'results',f1s_df.reset_index(),append_new_data_if_sheet_exists=True)
+
+                    coefs_dir = f'{save_dir}/coefs'
+                    os.makedirs(coefs_dir,exist_ok=True)
+
+                    # for p in coefs_all_cvs.keys():
+
+                    coefs_method = coefs_all_cvs[p]
+                    coefs_for_plot = coefs_method.mean().sort_values(ascending=False)[:15]
+                    coefs_for_plot = coefs_for_plot.sort_values(ascending=True)
+                    coefs_for_plot.plot(kind='barh', title='Feature Importances',figsize=(8,9))
+                    # coef_mean_sorted = np.sort(coef_mean)[::-1]
+                    # coefs = pd.DataFrame(coef_mean, columns = dt_modality[1], index = "coefs")
+                    # coefs = coefs.sort_values(by = "coefs", ascending = False)
+                    # coefs_for_plot.plot(kind='barh', title='Feature Importances',figsize=(8,9))
+                    plt.ylabel('Feature Importance Score')
+                    # plt.xticks(rotation=45)
+                    plt.tight_layout()
+                    # a = coefs_df.mean().sort_values(ascending=False)[:10]
+                    # plt.ylabel('Feature Importance Score')
+                    
+                    plt.savefig(f'{coefs_dir}/coefs_{p}_{configs.eval.slice_id}.png')
+                    plt.close()
+                    coefs_method.to_pickle(f'{coefs_dir}/coefs_{p}.pickle')
+                    coefs_method.to_csv(f'{coefs_dir}/coefs_{p}.csv')
+                    
+                    # save dict as pickle
+                    pickle.dump(coefs_all, open(f'{coefs_dir}/coefs_all.pickle', 'wb'))
                 else:
                     res[sheetname] = moa_pred_res
                     # saveAsNewSheetToExistingFile(filename,moa_pred_res,'fC-'+dataset+'-'+profTypeAbbrev+'-'+f+'-preds-'+cls_model+'-ht-sgkf-10f')
 
 ############################################################################################################
     
-def compute_f1_scores(moa_pred_res, exp_name = None):
-    methods= ['CP', 'GE','Late Fusion']
+def compute_f1_scores(moa_pred_res, exp_name = None,run_l1k = False):
+    if run_l1k:
+        methods= ['CP','GE','Early Fusion','Late Fusion']
+    else:
+        methods= ['CP','Early Fusion']
     f1s={}
     # f1s_mean={}
     # f1_std = {}
+    print('before nan removal', moa_pred_res.shape)
+    moa_pred_res.dropna(subset=['Fold'],inplace=True)
+    print('after nan removal', moa_pred_res.shape)
     folds=moa_pred_res['Fold'].unique().tolist()
     for dd in methods:
         mean_name = f'{dd}_mean'
@@ -385,34 +496,26 @@ def compute_f1_scores(moa_pred_res, exp_name = None):
     return f1s
 
 ############################################################################################################
-def load_data_for_moa_prediction(configs, data_reps, filter_repCorr_params, pertColName='PERT'):
+def load_data_filtered_by_rep_corr(configs, data_reps, filter_repCorr_params, pertColName='PERT',run_l1k = False):
 
     moa_col='Metadata_MoA'
     moa_col_name='Metadata_moa_with_n'
     methods = {}
+    
 
     for p in data_reps:
         methods[p] = {}
-        mergProf_treatLevel, cp_features,l1k_features = \
-        read_paired_treatment_level_profiles(configs.general.base_dir,configs.general.dataset,p,filter_repCorr_params,configs.eval.normalize_by_all,configs.general.exp_name,by_dose = configs.eval.by_dose)
 
-        # [cp_data_treatLevel,cp_features], [l1k_data_treatLevel,l1k_features]=\
-    # read_treatment_level_profiles(configs.general.base_dir,configs.general.dataset,p,filter_repCorr_params,configs.eval.normalize_by_all,configs.general.exp_name,by_dose = configs.eval.by_dose)
+        # if there is dose information and not running by dose, use only highest dose
+        # loads merged data by doses if filter_by_highest_dose=True, and use only highest dose
+        if not configs.eval.by_dose and DS_INFO_DICT[configs.general.dataset]['has_dose'] and configs.eval.filter_by_highest_dose:
+            mergProf_treatLevel, cp_features,l1k_features = \
+                read_paired_treatment_level_profiles(configs.general.base_dir,configs.general.dataset,p,filter_repCorr_params,configs.eval.normalize_by_all,configs.general.exp_name,by_dose = False, filter_by_highest_dose=configs.eval.filter_by_highest_dose)
+        else:
+            mergProf_treatLevel, cp_features,l1k_features = \
+                read_paired_treatment_level_profiles(configs.general.base_dir,configs.general.dataset,p,filter_repCorr_params,configs.eval.normalize_by_all,configs.general.exp_name,by_dose = configs.eval.by_dose)
 
-        # Perform standardization for L1000 data
-        # if not configs.eval.normalize_by_all:
-            # l1k_data_treatLevel = standardize_per_catX(l1k_data_treatLevel,'det_plate',l1k_features)
 
-
-        # labelCol = 'PERT'
-        # mergProf_treatLevel=pd.merge(cp_data_treatLevel, l1k_data_treatLevel, how='inner',on=[labelCol])
-
-        # print('Treatment Level Shapes (nSamples x nFeatures+metadata):',cp_data_treatLevel.shape,l1k_data_treatLevel.shape,\
-        #   'Merged Profiles Shape:', mergProf_treatLevel.shape)
-
-        # [cp_data_repLevel,cp_features], [l1k_data_repLevel,l1k_features] = read_replicate_level_profiles(dataset_rootDir,dataset,profileType,per_plate_normalized_flag,exp_name='')
-        # merge_profiles(cp_data_rep_level, l1k_data_rep_level,repCorrFilePath, profile_types_filtered,nRep,filter_perts = 'highUnion')
-    
         ##################################
         if configs.general.dataset=='LINCS':
             mergProf_treatLevel[moa_col]=mergProf_treatLevel['Metadata_moa']
@@ -456,7 +559,7 @@ def load_data_for_moa_prediction(configs, data_reps, filter_repCorr_params, pert
         # cp_scaled[cp_features] = scaler_cp.fit_transform(cp_scaled[cp_features].values.astype('float64'))
 
         # cp_scaled[cp_scaled[cp_features]>z_trim]=z_trim
-        cp_features = cp_scaled.columns[cp_scaled.columns.str.contains("Cells_|Cytoplasm_|Nuclei_")]
+        cp_features = list(cp_scaled.columns[cp_scaled.columns.str.contains("Cells_|Cytoplasm_|Nuclei_")])
         if configs.eval.z_trim is not None:
             cp_scaled[cp_features] = np.where(cp_scaled[cp_features]>configs.eval.z_trim,configs.eval.z_trim ,cp_scaled[cp_features])
             cp_scaled[cp_features] = np.where(cp_scaled[cp_features]<-configs.eval.z_trim,-configs.eval.z_trim ,cp_scaled[cp_features])
@@ -525,18 +628,34 @@ def load_data_for_moa_prediction(configs, data_reps, filter_repCorr_params, pert
         filteredMOAs.head()
 
         ########################################################### Prepare data for evaluation ###########################################################
-
-        methods[p]["data4eval"] =[[methods[p]["cp_scaled"][methods[p]["cp_scaled"][moa_col].isin(listOfSelectedMoAs)].reset_index(drop=True),cp_features],\
-            [methods[p]["l1k_scaled"][methods[p]["l1k_scaled"][moa_col].isin(listOfSelectedMoAs)].reset_index(drop=True),l1k_features]]
-                # [filteredMOAs,cp_features+l1k_features]]
-
+        
+        methods[p]["data4eval"] =[
+            # run classification based on cp data only
+            [methods[p]["cp_scaled"][methods[p]["cp_scaled"][moa_col].isin(listOfSelectedMoAs)].reset_index(drop=True),cp_features],
+            # run classification based on fused data of l1k and cp
+            [filteredMOAs,cp_features+l1k_features]
+            ]
+         
     if configs.moa.do_fusion:
         methods = create_fused_ad_rep(configs, methods, listOfSelectedMoAs, l1k_features, cp_features, moa_col=moa_col)
+        # if run_l1k:
+            # methods[p]["data4eval"].append([methods[p]["l1k_scaled"][methods[p]["l1k_scaled"][moa_col].isin(listOfSelectedMoAs)].reset_index(drop=True),l1k_features])
+
+            # methods['fusion']['data4eval'].append([filteredMOAs,cp_features+l1k_features])
     
+    for p in methods.keys():
+
+        # run classification based on l1k data only
+        if run_l1k:
+            methods[p]['data4eval'].append([methods[p]['l1k_scaled'][methods[p]['l1k_scaled'][moa_col].isin(listOfSelectedMoAs)].reset_index(drop=True),l1k_features])
+
+        
+        # methods.append([filteredMOAs,cp_features+l1k_features])
+        
 
     return methods, filteredMOAs
 
-############################################################################################################
+#########################data4###################################################################################
    
 def create_fused_ad_rep(configs, methods, listOfSelectedMoAs, l1k_features, cp_features, moa_col='Metadata_MoA'):
 
@@ -548,6 +667,7 @@ def create_fused_ad_rep(configs, methods, listOfSelectedMoAs, l1k_features, cp_f
     # profiles['fusion']['cp_scaled']['Compounds'] = profiles[profileTypes[0]]['cp_scaled']['Compounds']
     
     fused_features = [feat for feat in methods['fusion']['cp_scaled'].columns if 'Cells_' in feat or 'Cytoplasm_' in feat or 'Nuclei_' in feat]
+    
     # profiles['fusion']['cp_scaled'] = pd.concat([profiles[p]["cp_scaled"][cp_features] for p in profileTypes], axis=1)
     # cp_meta_feautres = [feat for feat in profiles['fusion']['cp_scaled'].columns if 'Metadata' in feat]
     # profiles['fusion']['cp_scaled'][meta_feautres]= profiles['normalized_variable_selected_baseline']['cp_scaled'][meta_feautres]
@@ -555,9 +675,10 @@ def create_fused_ad_rep(configs, methods, listOfSelectedMoAs, l1k_features, cp_f
     # l1k_meta_features = [feat for feat in profiles['fusion']['l1k_scaled'].columns if 'Metadata' in feat]
     # profiles['fusion']['l1k_scaled'][meta_feautres]= profiles['normalized_variable_selected_baseline']['l1k_scaled'][meta_feautres]
     # profiles['fusion']['merged_scaled'] = pd.concat([profiles[p]["merged_scaled"] for p in profileTypes], axis=1)
+    fused_merged_scaled = pd.merge(methods['fusion']['cp_scaled'], methods['fusion']['l1k_scaled'], on=['PERT','Compounds','Metadata_MoA'], how='inner')
     methods['fusion']['data4eval'] = [[methods['fusion']["cp_scaled"][methods['fusion']["cp_scaled"][moa_col].isin(listOfSelectedMoAs)].reset_index(drop=True),fused_features],\
-        [methods[profileTypes[0]]["l1k_scaled"][methods['fusion']["l1k_scaled"][moa_col].isin(listOfSelectedMoAs)].reset_index(drop=True),l1k_features]]
-            # [filteredMOAs,cp_features+l1k_features]]
+        # [methods[profileTypes[0]]["l1k_scaled"][methods['fusion']["l1k_scaled"][moa_col].isin(listOfSelectedMoAs)].reset_index(drop=True),l1k_features]]
+            [fused_merged_scaled[fused_merged_scaled[moa_col].isin(listOfSelectedMoAs)].reset_index(drop=True),fused_features+l1k_features]]
     return methods
 
 
@@ -576,23 +697,28 @@ if __name__ == '__main__':
 
     configs = set_configs()
     if len(sys.argv) <2:
-        exp_name = 'report_911_t'
+        exp_name = '0512_t_dd'
         configs.general.exp_name = exp_name
         configs.general.dataset = 'LINCS'
         # configs.general.dataset = 'CDRP-bio'
-
         configs.data.profile_type = 'normalized_variable_selected'
         configs.data.profile_type = 'augmented'
         configs.data.modality = 'CellPainting'
         configs.eval.by_dose = False
+        configs.eval.filter_by_highest_dose = True
         slice_id = 0
         configs.general.flow ='concat_moa_res'
-        configs.moa.do_all_filter_groups = False
-        # configs.general.flow = 'run_moa'
-        configs.general.debug_mode = True
-
+        # configs.general.flow ='run_moa'
+        configs.moa.do_all_filter_groups = True
         
-        # configs = set_configs(exp_name)
+        configs.general.debug_mode = False
+        configs.moa.min_samples = 4
+        configs.moa.tune = True
+        configs.eval.normalize_by_all = True
+        configs.eval.run_dose_if_exists = True
+        configs.moa.moa_dirname = 'moa_single'
+        configs.moa.folds = 5
+        configs.eval.z_trim = 8
 
     else:
         # exp_name = sys.argv[1]
@@ -607,17 +733,14 @@ if __name__ == '__main__':
         configs.general.flow = 'run_moa'
 
 
-
     configs = set_paths(configs)
 
     slice_id = int(slice_id)
     ################################################
     # datasets=['TAORF','LUAD','LINCS', 'CDRP-bio']
-    datasets=['CDRP-bio']
+    
     datasets = [configs.general.dataset]
     # DT_kfold={'LUAD':10, 'TAORF':5, 'LINCS':25, 'CDRP-bio':6,'CDRP':40}
-
-
 
     base_dir= '/sise/assafzar-group/assafzar/genesAndMorph'
 
@@ -652,32 +775,36 @@ if __name__ == '__main__':
 
     profile_types = [p for p in ['augmented','normalized_variable_selected'] if any(p in string for string in os.listdir(configs.general.output_exp_dir))]
     # do_dose_if_exists = True
-    normalize_by_alls = [False,True]
+    # normalize_by_alls = [True]
 
-    if configs.eval.run_dose_if_exists and DS_INFO_DICT[configs.general.dataset]['has_dose']:
-        doses = [False,True]
+    if DS_INFO_DICT[configs.general.dataset]['has_dose']:
+    
+        if configs.eval.run_dose_if_exists:
+            doses = [False,True]
+        else:
+            doses = [configs.eval.by_dose]
     else:
         doses = [False]
         
-    for n in normalize_by_alls:
+    # for n in normalize_by_alls:
         
         # for f in filter_combs:
-        for d in doses:
-            for p in profile_types:
-                # if configs.general.dataset == 'CDRP-bio' and d:
-                    # continue
-                if configs.general.dataset == 'LINCS' and p == 'normalized_variable_selected':
-                    continue
-                print( f'running {p} {d} normalize{n}')
-                
-            # try:
-                configs.eval.normalize_by_all = n
-                configs.data.profile_type = p
-                configs.eval.by_dose = d
-                # configs.moa.filter_groups = f
-            # configs = set_paths(configs)
-                main(configs, methods)
-                # except:
-                    # print(f'failed for {p}, {d}')
+    for d in doses:
+        for p in profile_types:
+            # if configs.general.dataset == 'CDRP-bio' and d:
+                # continue
+            if configs.general.dataset == 'LINCS' and p == 'normalized_variable_selected':
+                continue
+            # print( f'running {p} {d} normalize{n}')
+            
+        # try:
+            # configs.eval.normalize_by_all = n
+            configs.data.profile_type = p
+            configs.eval.by_dose = d
+            # configs.moa.filter_groups = f
+        # configs = set_paths(configs)
+            main(configs, methods)
+            # except:
+                # print(f'failed for {p}, {d}')
                     
         

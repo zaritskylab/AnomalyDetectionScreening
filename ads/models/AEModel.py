@@ -15,30 +15,61 @@ from torchmetrics.functional import pearson_corrcoef,r2_score
 
 
 class Autoencoder(nn.Module):
-  def __init__(self, input_size, latent_size):
+  def __init__(self, input_size, latent_size, deep_decoder=False, encoder_type=False, dropout=0):
     super(Autoencoder, self).__init__()
-    self.encoder = nn.Sequential(
-      nn.Linear(input_size, 128),
-      nn.ReLU(),
-      # nn.LeakyReLU(0.1),
-      nn.Linear(128, 64),
-      nn.ReLU(),
-      nn.Linear(64, 32),
-      nn.ReLU(),
-      # nn.LeakyReLU(0.1),
-      nn.Linear(32, latent_size)
-    )
-    self.decoder = nn.Sequential(
-      # nn.Linear(latent_size, input_size),
-      nn.ReLU(),
-      nn.Linear(latent_size, 64),
-      nn.ReLU(),
-      # nn.Dropout(0.1),
-      nn.Linear(64, 128),
-      nn.ReLU(),
-      # nn.Dropout(0.1),
-      nn.Linear(128, input_size)
-    )
+
+    if encoder_type=='shallow':
+      self.encoder = nn.Sequential(
+        nn.Linear(input_size, 128),
+        nn.ReLU(),
+        # nn.LeakyReLU(0.1),
+        nn.Linear(128, 64),
+        # nn.ReLU(),
+        nn.Linear(64, latent_size),
+        # nn.ReLU(),
+        # nn.LeakyReLU(0.1),
+        # nn.Linear(32, latent_size)
+      )
+    elif encoder_type=='deep':
+      self.encoder = nn.Sequential(
+        nn.Linear(input_size, 256),
+        nn.ReLU(),
+        # nn.LeakyReLU(0.1),
+        nn.Linear(256, 128),
+        nn.ReLU(),
+        nn.Linear(128, 64),
+        nn.ReLU(),
+        # nn.LeakyReLU(0.1),
+        nn.Linear(64, latent_size)
+      )
+    else:
+      self.encoder = nn.Sequential(
+        nn.Linear(input_size, 128),
+        nn.ReLU(),
+        # nn.LeakyReLU(0.1),
+        nn.Linear(128, 64),
+        nn.ReLU(),
+        nn.Linear(64, 32),
+        nn.ReLU(),
+        # nn.LeakyReLU(0.1),
+        nn.Linear(32, latent_size)
+      )
+    if deep_decoder:
+      self.decoder = nn.Sequential(
+        # nn.Linear(latent_size, input_size),
+        nn.ReLU(),
+        nn.Linear(latent_size, 64),
+        nn.ReLU(),
+        nn.Dropout(dropout),
+        nn.Linear(64, 128),
+        nn.ReLU(),
+        nn.Dropout(dropout),
+        nn.Linear(128, input_size)
+      )
+    else:
+      self.decoder = nn.Sequential(
+        nn.Linear(latent_size, input_size)
+      )
 
   def forward(self, x):
     z = self.encoder(x)
@@ -55,7 +86,10 @@ class AutoencoderModel(pl.LightningModule):
 
     self.autoencoder = Autoencoder(
       input_size=self.hparams.input_size,
-      latent_size=self.hparams.latent_size
+      latent_size=self.hparams.latent_size,
+      deep_decoder=self.hparams.deep_decoder,
+      encoder_type=self.hparams.encoder_type,
+      dropout=self.hparams.dropout
     )
 
     self.l2_loss = nn.MSELoss(reduction='mean')
@@ -140,23 +174,7 @@ class AutoencoderModel(pl.LightningModule):
 
     x_recon, z = self.autoencoder(x)
 
-    # recon_loss = self.l2_loss(x_recon, x)
-    # l2_reg = self.hparams.l2_lambda * self.l2_loss(x_recon,torch.zeros_like(x_recon))
-    # loss = recon_loss + l2_reg
     return x_recon, z
-    # pred = torch.vstack([self.dropout(self.model(batch)).unsqueeze(0) for _ in range(self.mc_iteration)]).mean(dim=0)
-
-  # def predict_epoch_end(self, outputs):
-  #   test_loss_mean = torch.stack([x['test_loss'] for x in outputs]).mean()
-  #   x_recon = torch.cat([x['x_recon'] for x in outputs], dim=0)
-  #   z = torch.cat([x['z'] for x in outputs], dim=0)
-
-    # self.logger.experiment.add_image('Reconstructed Images', x_recon, self.current_epoch)
-    # self.logger.experiment.add_embedding(z, metadata=None, global_step=self.current_epoch)
-    #
-    # self.log('test_loss', test_loss_mean)
-    #
-    # return {'test_loss': test_loss_mean, 'x_recon': x_recon, 'z': z}
 
   def configure_optimizers(self):
     optimizer = torch.optim.Adam(self.parameters(), lr=self.hparams.lr)

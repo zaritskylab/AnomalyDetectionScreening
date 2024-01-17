@@ -73,12 +73,17 @@ def replicateCorrs(inDf,pertColName,featColNames,plotEnabled):
 #         randC=randC+randCorr
 # #     print(randC)    
 #     print('here3')
-    randC_v2=[]    
-    for i in range(1):
-        uniqeSamplesFromEachPurt=inDf.groupby(pertColName)[featColNames].apply(lambda s: s.sample(1))
-        corrMatAcrossPurtbs=uniqeSamplesFromEachPurt.loc[:,featColNames].T.corr()
-        randCorrVals=list(corrMatAcrossPurtbs.values[np.triu_indices(corrMatAcrossPurtbs.shape[0], k = 1)])
-    randC_v2=randC_v2+randCorrVals
+
+    # randC_v2=[]    
+    # for i in range(1):
+    #     uniqeSamplesFromEachPurt=inDf.groupby(pertColName)[featColNames].apply(lambda s: s.sample(1))
+    #     corrMatAcrossPurtbs=uniqeSamplesFromEachPurt.loc[:,featColNames].T.corr()
+    #     randCorrVals=list(corrMatAcrossPurtbs.values[np.triu_indices(corrMatAcrossPurtbs.shape[0], k = 1)])
+    # randC_v2=randC_v2+randCorrVals
+    # randC_v2 = [randC_v2 for randC_v2 in randC_v2 if str(randC_v2) != 'nan']    
+
+    randC_v2=calc_rand_corr(inDf,pertColName,featColNames)
+
         
     if 0:
         fig, axes = plt.subplots(figsize=(5,3))
@@ -91,7 +96,6 @@ def replicateCorrs(inDf,pertColName,featColNames,plotEnabled):
         axes.set_xlim(-1.1,1.1)
         
     repC = [repC for repC in repC if str(repC) != 'nan']
-    randC_v2 = [randC_v2 for randC_v2 in randC_v2 if str(randC_v2) != 'nan']    
     
     perc95=np.percentile(randC_v2, 90);
     rep10=np.percentile(repC, 10);
@@ -116,6 +120,15 @@ def replicateCorrs(inDf,pertColName,featColNames,plotEnabled):
 #     return repCorrDf
     return [randC_v2,repC,repCorrDf]
 
+def calc_rand_corr(inDf,pertColName,featColNames):
+    randC_v2=[]    
+    for i in range(1):
+        uniqeSamplesFromEachPurt=inDf.groupby(pertColName)[featColNames].apply(lambda s: s.sample(1))
+        corrMatAcrossPurtbs=uniqeSamplesFromEachPurt.loc[:,featColNames].T.corr()
+        randCorrVals=list(corrMatAcrossPurtbs.values[np.triu_indices(corrMatAcrossPurtbs.shape[0], k = 1)])
+    randC_v2=randC_v2+randCorrVals
+    randC_v2 = [randC_v2 for randC_v2 in randC_v2 if str(randC_v2) != 'nan']    
+    return randC_v2
 
 
 # input is a list of dfs--> [cp,l1k,cp_cca,l1k_cca]

@@ -17,7 +17,7 @@ import os
 from utils.eval_utils import plot_latent_effect
 from models.AEModel import AutoencoderModel
 
-from utils.data_utils import load_data, pre_process, to_dataloaders,normalize
+from utils.data_utils import load_data, pre_process, to_dataloaders,normalize,get_features
 from utils.readProfiles import save_profiles
 import os
 from typing import Dict, Union
@@ -29,34 +29,48 @@ import seaborn as sns
 import optuna
 
 
-# from pytorch_lightning.utilities.cli import LightningCLI
+def main(configs):
+    data , __ = load_data(configs.general.base_dir,configs.general.dataset,configs.data.profile_type, modality=configs.data.modality)
+    data,features =  pre_process(data,configs,overwrite = False)
+    dataloaders = to_dataloaders(data,hparams['batch_size'],features)
+    model, losses = train_autoencoder(dataloaders, features, configs)
+
+    test_dataloaders = list(dataloaders.keys())[2:]
+    preds, z_preds = test_autoencoder(model, dataloaders, features, configs)
+
+    preds_normalized=save_treatments(data, preds['test_ctrl'],preds['test_treat'], configs.general.output_exp_dir,  f'replicate_level_{configs.data.modality_str}_{configs.data.profile_type}_ae', configs, features)
+    # save_treatments(data, z_pred_ctrl,z_pred_treat, configs.general.output_exp_dir,  f'replicate_level_{configs.data.modality_str}_{configs.data.profile_type}_ae_embeddings', configs, features, embeddings=True)
+    diffs_normalized= save_treatments(data, preds['test_ctrl'] - data[data['Metadata_set'] == 'test_ctrl'][features],preds['test_treat'] - data[data['Metadata_set'] == 'test_treat'][features], configs.general.output_exp_dir,  f'replicate_level_{configs.data.modality_str}_{configs.data.profile_type}_ae_diff', configs, features)
+
+
 
 # Define a PyTorch Lightning model evaluation function for Optuna
-def objective(trial, data,features,hidden_size=None,deep_decoder=False,model_type='AE'):
+def objective(trial, dataloaders,features,hidden_size=None,deep_decoder=False, encoder_type = 'default',model_type='AE'):
     # Define hyperparameters to tune    
 
     if hidden_size is None:
         hidden_size = trial.suggest_categorical('hidden_size', [16, 32, 64, 128, 256])
 
-    # dropout = trial.suggest_float('dropout', 0, 0.4)
+    dropout = trial.suggest_float('dropout', 0, 0.2)
     # output_size = 10
-    batch_size = trial.suggest_categorical('batch_size', [32, 64, 128, 256])
+    # batch_size = trial.suggest_categorical('batch_size', [32, 64, 128, 256])
     # hidden_size = trial.suggest_int('hidden_size', 32, 256, log=True)
     learning_rate = trial.suggest_float('learning_rate', 1e-5, 1e-2)
     l2_lambda = trial.suggest_float('l2_lambda', 1e-7, 1e-2)
         # Initialize model
 
-    dataloaders = to_dataloaders(data,batch_size,features)
+    # dataloaders = to_dataloaders(data,batch_size,features)
 
     hparams = {
         'input_size': len(features),
         'latent_size': hidden_size,
         'l2_lambda': l2_lambda,
         'lr': learning_rate,
-        # 'dropout': dropout,
-        'batch_size': batch_size,
+        'dropout': dropout,
+        # 'batch_size': batch_size,
         'deep_decoder': deep_decoder,
-        'model_type': model_type
+        'model_type': model_type,
+        'encoder_type': encoder_type
     }
     # Initialize the PyTorch Lightning model
     model = AutoencoderModel(hparams)
@@ -67,7 +81,6 @@ def objective(trial, data,features,hidden_size=None,deep_decoder=False,model_typ
         callbacks=[EarlyStopping(monitor='val_loss')],
         logger=False  # Disable the logger to reduce overhead
     )
-
 
     # Perform training and validation
     trainer.fit(model, dataloaders['train'],dataloaders['val'])
@@ -81,26 +94,18 @@ def objective(trial, data,features,hidden_size=None,deep_decoder=False,model_typ
 
 
 # def train_autoencoder(configs: Dict[str, Union[str, float, int]],losses = {}) -> pl.LightningModule:
-def train_autoencoder(configs,losses = {}):
+def train_autoencoder(dataloaders, features, configs,losses = {}):
 
-    # Read data
-    #  data,features = load_data(configs.general.data_dir, configs.data.dataset, configs.data.profile_type)
-    data , __ = load_data(configs.general.base_dir,configs.general.dataset,configs.data.profile_type, modality=configs.data.modality)
-    data,features =  pre_process(data,configs,overwrite = False)
-    # features = data.columns.tolist()
-# 
-# (data, configs, features = None, overwrite = False, do_fs = False, modality ='CellPainting'):
-    # datasets, dataloaders,cp_features = prepare_data(cp, configs, cp_features, do_fs=configs.data.feature_select)
-
-    # Initialize model
+    # features = get_features(data, configs.data.modality)
     hparams = {'input_size': len(features),
         'latent_size': configs.model.latent_dim,
         'l2_lambda': configs.model.l2_lambda,
         'lr': configs.model.lr,
-        # 'dropout': configs.model.dropout,
+        'dropout': configs.model.dropout,
         'batch_size': configs.model.batch_size,
         'deep_decoder': configs.model.deep_decoder,
-        'model_type': configs.model.model_type
+        'model_type': configs.model.model_type,
+        'encoder_type': configs.model.encoder_type
     }
 
     # Set up logger and checkpoint callbacks
@@ -128,16 +133,7 @@ def train_autoencoder(configs,losses = {}):
         callbacks=[checkpoint_callback,early_stop_callback,progressbar_callback],
         max_epochs=configs.model.max_epochs,
         accelerator="auto",
-        # progress_bar_refresh_rate=50,
-
-        # precision=16 if configs['use_16bit'] else 32
-
-        # deterministic=True,
-        # fast_dev_run=configs['fast_dev_run']
     )
-
-    #TODO: add support to 'model' variable
-    # if configs.model.name == 'AE':
 
     if configs.model.tune_hyperparams:
         configs.general.logger.info('Tuning hyperparams...')
@@ -145,10 +141,12 @@ def train_autoencoder(configs,losses = {}):
 
         # Optuna study
         study = optuna.create_study(direction='minimize')
-        study.optimize(lambda trial: objective(trial, data, features,configs.model.latent_dim,configs.model.deep_decoder, configs.model.model_type), n_trials=configs.model.n_tuning_trials)
-
-
-        # study.optimize(objective,dataloaders)
+        study.optimize(lambda trial: objective(trial, dataloaders=dataloaders, features =features,
+                                                hidden_size = configs.model.latent_dim,
+                                                deep_decoder=configs.model.deep_decoder,
+                                                encoder_type=configs.model.encoder_type, 
+                                                model_type=configs.model.model_type), 
+                                                n_trials=configs.model.n_tuning_trials) 
 
         configs.general.logger.info('Best trial:')
         trial = study.best_trial
@@ -164,41 +162,14 @@ def train_autoencoder(configs,losses = {}):
             'latent_size': configs.model.latent_dim,
             'l2_lambda': trial.params['l2_lambda'],
             'lr': trial.params['learning_rate'],
-            # 'dropout': trial.params['dropout'],
-            'batch_size': trial.params['batch_size'],
-            'deep_decoder': configs.model.deep_decoder
+            'dropout': trial.params['dropout'],
+            'batch_size': configs.model.batch_size,
+            'deep_decoder': configs.model.deep_decoder,
+            'encoder_type': configs.model.encoder_type
         }
-
-    dataloaders = to_dataloaders(data,hparams['batch_size'],features)
+    
     model = AutoencoderModel(hparams)
     trainer.fit(model, dataloaders['train'],dataloaders['val'])
-
-    # # NOT SUPPORTED YET
-    # elif configs['model'] == 'cae':
-    #     print('Concrete AEs not supported yet...')
-    #     #TODO: when this works, run over K, do Yuval check of K hyperparameter
-
-    #     # Initialize the feature selector model
-    #     K = 10  # Number of features to select
-    #     output_function = nn.Linear(K, len(cp_features))  # Update with your desired output function
-    #     model = ConcreteAutoencoderFeatureSelector(K, output_function)
-
-    #     #TODO: test if CAE fit works
-    #     selector = ConcreteAutoencoderFeatureSelector(hparams)
-    #     trainer.fit(model, dataloaders['train'],dataloaders['val'])
-
-    #     #TODO: test if extraction of important features work
-    #     selector.compute_probs(trainer.concrete_select)
-
-    #     # Extract the indices of the most important features
-    #     indices = selector.get_indices()
-
-    #     # Extract the mask indicating the most important features
-    #     mask = selector.get_mask()
-
-    #     # Extract the most important features from the original data
-    #     selected_features = mask[:, indices]
-    #     #TODO: add support for test
 
     # Test model
     test_dataloaders = ['train','val','test_ctrl', 'test_treat']
@@ -211,28 +182,12 @@ def train_autoencoder(configs,losses = {}):
         #     losses[data_subset][res].append(dict_res[res])
         losses[data_subset] = trainer.test(model, dataloader)
 
-    # disable grads + batchnorm + dropout
-    torch.set_grad_enabled(False)
-    model.eval()
-    all_preds = {}
-    x_recon_preds = {}
-    z_preds = {}
-    predict_dataloaders = ['test_ctrl', 'test_treat']
-    for subset in list(dataloaders.keys())[2:]:
-        dataloader = dataloaders[subset]
-        x_recon_preds[subset] =[]
-        z_preds[subset] = []
-        for batch_idx, batch in enumerate(dataloader):
-            x_recon_pred, z_pred = model.predict_step(batch, batch_idx)
-            x_recon_preds[subset].append(x_recon_pred.numpy())
-            z_preds[subset].append(z_pred.numpy())
 
+    # x_recon_ctrl = np.concatenate(x_recon_preds['test_ctrl'])
+    # z_pred_ctrl = np.concatenate(z_preds['test_ctrl'])
 
-    x_recon_ctrl = np.concatenate(x_recon_preds['test_ctrl'])
-    z_pred_ctrl = np.concatenate(z_preds['test_ctrl'])
-
-    x_recon_treat = np.concatenate(x_recon_preds['test_treat'])
-    z_pred_treat = np.concatenate(z_preds['test_treat'])
+    # x_recon_treat = np.concatenate(x_recon_preds['test_treat'])
+    # z_pred_treat = np.concatenate(z_preds['test_treat'])
 
     # process and save anomaly detection output    
     # output_dir = os.path.join(configs.general.base_dir, 'anomaly_output', configs.general.dataset,'CellPainting',configs.general.exp_name)
@@ -272,7 +227,7 @@ def train_autoencoder(configs,losses = {}):
             pred_filename = f'replicate_level_cp_{configs.data.profile_type}_ae'
             save_profiles(test_treat_out_normalized, output_dir, pred_filename)
 
-        print('saved prediction files')
+        configs.general.logger.info('saved prediction files')
 
         meta_features = [col for col in test_ctrl_out.columns if 'Metadata_' in col]
         test_meta_df = test_treat_out[meta_features].reset_index(drop=True)
@@ -325,12 +280,11 @@ def train_autoencoder(configs,losses = {}):
         diff_filename = f'replicate_level_cp_{configs.data.profile_type}_ae_diff'
         if not configs.general.debug_mode:
             save_profiles(test_treat_out_normalized_diff, output_dir, diff_filename)
-    else:
+    # else:
 
-        save_treatments(data, x_recon_ctrl,x_recon_treat, configs.general.output_exp_dir,  f'replicate_level_{configs.data.modality_str}_{configs.data.profile_type}_ae', configs, features)
+        # save_treatments(data, preds['test_ctrl'],preds['test_treat'], configs.general.output_exp_dir,  f'replicate_level_{configs.data.modality_str}_{configs.data.profile_type}_ae', configs, features)
         # save_treatments(data, z_pred_ctrl,z_pred_treat, configs.general.output_exp_dir,  f'replicate_level_{configs.data.modality_str}_{configs.data.profile_type}_ae_embeddings', configs, features, embeddings=True)
-
-        save_treatments(data, x_recon_ctrl - data[data['Metadata_set'] == 'test_ctrl'][features],x_recon_treat - data[data['Metadata_set'] == 'test_treat'][features], configs.general.output_exp_dir,  f'replicate_level_{configs.data.modality_str}_{configs.data.profile_type}_ae_diff', configs, features)
+        # save_treatments(data, preds['test_ctrl'] - data[data['Metadata_set'] == 'test_ctrl'][features],x_recon_treat - data[data['Metadata_set'] == 'test_treat'][features], configs.general.output_exp_dir,  f'replicate_level_{configs.data.modality_str}_{configs.data.profile_type}_ae_diff', configs, features)
 
 
     print('saved diff files')
@@ -341,10 +295,35 @@ def train_autoencoder(configs,losses = {}):
     sns.relplot(data=metrics, kind="line")
     plt.ylim(0, 1)
     plt.show()
-    plt.savefig(os.path.join(configs.general.output_exp_dir, f'training_loss.png'))
-    plt.close()
+    # plt.savefig(os.path.join(configs.general.output_exp_dir, f'training_loss.png'))
+    # plt.close()
 
     return model, losses
+
+
+def test_autoencoder(model, dataloaders, features, configs):
+    # disable grads + batchnorm + dropout
+    torch.set_grad_enabled(False)
+    model.eval()
+    preds = {}
+    x_recon_preds = {}
+    z_preds = {}
+    test_dataloaders = ['test_ctrl', 'test_treat']
+    for subset in list(dataloaders.keys())[2:]:
+        dataloader = dataloaders[subset]
+        x_recon_preds[subset] =[]
+        z_preds[subset] = []
+        for batch_idx, batch in enumerate(dataloader):
+            x_recon_pred, z_pred = model.predict_step(batch, batch_idx)
+            x_recon_preds[subset].append(x_recon_pred.numpy())
+            z_preds[subset].append(z_pred.numpy())
+
+    for subset in list(dataloaders.keys())[2:]:
+        preds[subset] = np.concatenate(x_recon_preds[subset])
+        z_preds[subset] = np.concatenate(z_preds[subset])
+    return preds, z_preds
+
+
 
 def save_treatments(data, preds_ctrl,preds_treat, output_dir, filename, configs, features,embeddings=False):
 
@@ -374,6 +353,9 @@ def save_treatments(data, preds_ctrl,preds_treat, output_dir, filename, configs,
     if not configs.general.debug_mode:
         # pred_filename = f'replicate_level_cp_{configs.data.profile_type}_ae'
         save_profiles(test_out_normalized, output_dir, filename)
+    return test_out_normalized
+
+
 
 if __name__ == '__main__':
 

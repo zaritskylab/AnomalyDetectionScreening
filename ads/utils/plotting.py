@@ -3,6 +3,22 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import os
+import matplotlib.pyplot as plt
+from matplotlib import cm
+
+
+##############################################################################################################
+
+def get_color_from_palette(name, index):
+    # Get the colormap
+    cmap = cm.get_cmap(name)
+
+    # Get the RGB values at the specified index
+    rgb_values = cmap.colors[index]
+
+    return rgb_values
+
+##############################################################################################################
 
 def enter_bucket_wrapper(th, method_a = 'map',method_b = 'raw1to1'):
     def enter_bucket(sr):
@@ -28,6 +44,8 @@ def enter_bucket_wrapper(th, method_a = 'map',method_b = 'raw1to1'):
         return 'none'
     
     return enter_bucket
+
+##############################################################################################################
 
 def enter_bucket_wrapper_ss(t, th, chan, method_a = 'map',method_b = 'raw1to1'):
     def enter_bucket(sr):
@@ -229,12 +247,20 @@ def melt_df(df, col_name):
     df = df.melt(id_vars=['cpd'], var_name="p_val", value_name=col_name)
     return df
 
-def merge_p_median_vals(df_cpd_vals, df_null):
-    """
-    This function merge p_values and median scores 
-    dataframes for each compound for all doses(1-6) 
-    """
-    df_p_vals = melt_df(df_null, 'p_values')
-    df_cpd_vals = melt_df(df_cpd_vals, 'median_scores')
-    df_cpd_vals['p_values'] = df_p_vals['p_values']
-    return df_cpd_vals
+# def merge_p_median_vals(df_cpd_vals, df_null):
+#     """
+#     This function merge p_values and median scores 
+#     dataframes for each compound for all doses(1-6) 
+#     """
+#     df_p_vals = melt_df(df_null, 'p_values')
+#     df_cpd_vals = melt_df(df_cpd_vals, 'median_scores')
+#     df_cpd_vals['p_values'] = df_p_vals['p_values']
+#     return df_cpd_vals
+
+
+##############################################################################################################
+
+def show_reproducicility(df, method_a = 'map',method_b = 'raw1to1',save_dir=None):
+    nrow = 1
+    ts = [2,4,6]#[2,6,10,14]
+    ncol = len(ts)

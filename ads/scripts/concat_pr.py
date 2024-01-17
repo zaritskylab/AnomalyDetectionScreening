@@ -132,7 +132,8 @@ if __name__ == "__main__":
             # configs.eval.normalize_by_all = n
             for p in profile_types:
                 exp_suffix = add_exp_suffix(p,d, normalize_by_all=n)
-                save_pr_path =f'{exp_save_dir}/pr{exp_suffix}.csv'
+                exp_save_dir = f'{exp_save_dir}/{exp_suffix}'
+                save_pr_path =f'{exp_save_dir}/pr.csv'
 
                 if not  os.path.exists(save_pr_path):
                 # if p == 'augmented':

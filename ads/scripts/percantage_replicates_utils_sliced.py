@@ -151,7 +151,7 @@ if __name__ == '__main__':
                 data_dir =  get_cp_dir(base_dir,datasets[0],p)
 
                 exp_suffix = add_exp_suffix(p,d,configs.eval.normalize_by_all)
-                
+                exp_save_dir = f'{save_base_dir}/{exp_suffix}'
                 if d:
                     null_dist_path = f'{null_base_dir}/null_distribution_replicates_{num_rand}_d.pkl'
                 else:
@@ -240,13 +240,13 @@ if __name__ == '__main__':
                             
                             save_dir = exp_save_dir
 
-                            null_distribution_medians_path = f'{save_dir}/null_distribution_medians_{num_rand}_{m}{exp_suffix}.pkl'
+                            null_distribution_medians_path = f'{save_dir}/null_distribution_medians_{num_rand}_{m}.pkl'
                             
                             if not os.path.exists(null_distribution_medians_path):
                                 print(f'path {null_distribution_medians_path} doesn\'t exist, calculating null_distribution_medians for {m}')
 
                                 print(len(cpds), m)
-                                cur_dest = os.path.join(save_dir, f'{m}{exp_suffix}')
+                                cur_dest = os.path.join(save_dir, f'{m}')
                                 os.makedirs(cur_dest, exist_ok=True)
                                 cur_dest = os.path.join(cur_dest, f'{slice_id}.pickle')
                                 res = {}

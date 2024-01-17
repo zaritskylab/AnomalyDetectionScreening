@@ -12,8 +12,11 @@ from pycytominer.cyto_utils import output
 # from normalize_funcs import standardize_per_catX
 
 #'dataset_name',['folder_name',[cp_pert_col_name,l1k_pert_col_name],[cp_control_val,l1k_control_val]]
+# from utils.eval_utils import filter_data_by_highest_dose
 from dataset_paper_repo.utils.normalize_funcs import standardize_per_catX
 from utils.global_variables import DS_INFO_DICT
+
+
 
 ds_info_dict={'CDRP':['CDRP-BBBC047-Bray',['Metadata_Sample_Dose','pert_sample_dose']],
               'CDRP-bio':['CDRPBIO-BBBC036-Bray',['Metadata_Sample_Dose','pert_sample_dose']],
@@ -100,15 +103,21 @@ def read_replicate_level_profiles(dataset_rootDir,dataset,profileType,per_plate_
         cp_dataDir = dataset_rootDir+'/anomaly_output/'+dataset
         cp_path = os.path.join(cp_dataDir,'CellPainting',exp_name,'replicate_level_cp_'+profileType+'.csv')
     else:
-        
-        cp_path = dataDir+'/CellPainting/replicate_level_cp_'+profileType+'.csv.gz'
+        if dataset == 'LUAD':
+            cp_path = dataDir+'CellPainting/replicate_level_cp_'+profileType+'.csv'
+        else:
+            cp_path = dataDir+'CellPainting/replicate_level_cp_'+profileType+'.csv.gz'
     print(f' loading {cp_path}')
     if not os.path.exists(cp_path):
         raise ValueError("File not found: {}".format(cp_path))
         # profileType = 'augmented'
         # cp_path = dataDir + '/CellPainting/replicate_level_cp_' + profileType + '.csv.gz'
-    cp_data_repLevel=pd.read_csv(cp_path, compression='gzip')
-    l1k_data_repLevel=pd.read_csv(dataDir+'/L1000/replicate_level_l1k.csv.gz')
+    if dataset == 'LUAD' and len(exp_name) == 0:
+        cp_data_repLevel = pd.read_csv(cp_path)
+        l1k_data_repLevel=pd.read_csv(dataDir+'/L1000/replicate_level_l1k.csv')
+    else:
+        cp_data_repLevel=pd.read_csv(cp_path, compression='gzip')
+        l1k_data_repLevel=pd.read_csv(dataDir+'/L1000/replicate_level_l1k.csv.gz')
 
     cp_features, l1k_features =  extract_feature_names(cp_data_repLevel, l1k_data_repLevel);
     
@@ -132,7 +141,7 @@ def read_replicate_level_profiles(dataset_rootDir,dataset,profileType,per_plate_
     l1k_data_repLevel[l1k_features] = l1k_data_repLevel[l1k_features].interpolate()
     # l1k=l1k.fillna(l1k.median())  
     # 
-    print('ATTENTION: l1k_data_repLevel is not standardized per plate EVEN with flag "per_plate_normalized_flag"=False\n\
+    print('ATTENTION: l1k_data_repLevel IS standardized per plate EVEN with flag "per_plate_normalized_flag"=False\n\
         To change this, move the standartization into the flag condition in "read_replicate_level_profiles function"')  
     l1k_data_repLevel = standardize_per_catX(l1k_data_repLevel,'det_plate',l1k_features);    
 
@@ -184,7 +193,7 @@ def extract_metadata_column_names(cp_data, l1k_data):
     return cp_meta_col_names, l1k_meta_col_names
 
 ################################################################################
-def read_treatment_level_profiles(dataset_rootDir,dataset,profileType,filter_repCorr_params,per_plate_normalized_flag,exp_name='',by_dose=True):
+def read_treatment_level_profiles(dataset_rootDir,dataset,profileType,filter_repCorr_params,per_plate_normalized_flag,exp_name='',by_dose=True, filter_by_highest_dose=False):
 
     """
     Reads replicate level CSV files (scaled replicate level profiles per plate)
@@ -214,7 +223,14 @@ def read_treatment_level_profiles(dataset_rootDir,dataset,profileType,filter_rep
     
     
     [cp_data_repLevel,cp_features], [l1k_data_repLevel,l1k_features] = read_replicate_level_profiles(dataset_rootDir,dataset,profileType,per_plate_normalized_flag,exp_name);
-        
+    
+    if filter_by_highest_dose:
+        print('filtering by highest dose, from ',cp_data_repLevel.shape[0],',',len(cp_features),  ',  ',l1k_data_repLevel.shape[0],',',len(l1k_features))
+        cp_data_repLevel = filter_data_by_highest_dose(cp_data_repLevel, dataset, modality = 'CellPainting')
+        l1k_data_repLevel = filter_data_by_highest_dose(l1k_data_repLevel, dataset, modality = 'L1000')
+        print('to ',cp_data_repLevel.shape[0],',',len(cp_features),  ',  ',l1k_data_repLevel.shape[0],',',len(l1k_features))
+        # cp_data_repLevel = cp_data_repLevel[cp_data_repLevel['Metadata_dose_recode'] == 'dose_6']
+        # l1k_data_repLevel = l1k_data_repLevel[l1k_data_repLevel['Metadata_dose_recode'] == 'dose_6']
 
     ############ rename columns that should match to PERT
     labelCol='PERT'
@@ -226,6 +242,12 @@ def read_treatment_level_profiles(dataset_rootDir,dataset,profileType,filter_rep
         cp_data_repLevel=cp_data_repLevel.rename(columns={DS_INFO_DICT[dataset]['CellPainting']['cpd_col']:labelCol})
         l1k_data_repLevel=l1k_data_repLevel.rename(columns={DS_INFO_DICT[dataset]['L1000']['cpd_col']:labelCol})    
         # DS_INFO_DICT[dataset][1][0] = labelCol
+    meta_features = [m for m in cp_data_repLevel.columns if m not in cp_features]
+
+    # if '.' in cp_data_repLevel[labelCol].iloc[0]:
+    #     cp_data_repLevel[labelCol] = cp_data_repLevel[labelCol].apply(lambda x: x.split('.')[0])
+    # if '.' in l1k_data_repLevel[labelCol].iloc[0]:
+    #     l1k_data_repLevel[labelCol] = l1k_data_repLevel[labelCol].apply(lambda x: x.split('.')[0])
             
     
     ###### print some data statistics
@@ -235,6 +257,8 @@ def read_treatment_level_profiles(dataset_rootDir,dataset,profileType,filter_rep
     print('l1k n of rep: ',l1k_data_repLevel.groupby([labelCol]).size().median())
     print('cp n of rep: ',cp_data_repLevel.groupby([labelCol]).size().median())
     
+    # add dose to sheetname if not included
+    # profile_types_filtered = [a+'_d' for a in profile_types_filtered if by_dose and a.split('_')[-1] != 'd']
 
     ###### remove perts with low rep corr
     if filter_perts=='highRepOverlap':    
@@ -261,12 +285,18 @@ def read_treatment_level_profiles(dataset_rootDir,dataset,profileType,filter_rep
 #               'LUAD':[['Metadata_broad_sample_type','Metadata_pert_type'],[]],
 #               'LINCS':[['Metadata_moa', 'Metadata_alternative_moa'],['moa']]}
 
-    meta_dict={'CDRP':[['Metadata_moa','Metadata_target'],[]],
-               'CDRP-bio':[['Metadata_moa','Metadata_target'],[]],
-              'TAORF':[[],[]],
-              'LUAD':[[],[]],
-              'LINCS':[['Metadata_moa', 'Metadata_alternative_moa'],['moa']]}
-    
+    if by_dose:
+        meta_dict={'CDRP':[['Metadata_moa','Metadata_target'],[]],
+                'CDRP-bio':[['Metadata_moa','Metadata_target'],[]],
+                'TAORF':[[],[]],
+                'LUAD':[[],[]],
+                'LINCS':[['Metadata_moa', 'Metadata_alternative_moa'],['moa']]}
+    else:
+        meta_dict={'CDRP':[['Metadata_moa','Metadata_target'],[]],
+                'CDRP-bio':[['Metadata_moa','Metadata_target'],[]],
+                'TAORF':[[],[]],
+                'LUAD':[[],[]],
+                'LINCS':[['Metadata_moa', 'Metadata_alternative_moa'],['moa']]}    
     
     meta_cp=cp_data_repLevel[[labelCol]+meta_dict[dataset][0]].\
     drop_duplicates().reset_index(drop=True)
@@ -281,7 +311,7 @@ def read_treatment_level_profiles(dataset_rootDir,dataset,profileType,filter_rep
 
 
 ################################################################################
-def read_paired_treatment_level_profiles(dataset_rootDir,dataset,profileType,filter_repCorr_params,per_plate_normalized_flag,exp_name='',by_dose=True):
+def read_paired_treatment_level_profiles(dataset_rootDir,dataset,profileType,filter_repCorr_params,per_plate_normalized_flag,exp_name='',by_dose=True, filter_by_highest_dose=False):
 
     """
     Reads treatment level profiles
@@ -299,7 +329,7 @@ def read_paired_treatment_level_profiles(dataset_rootDir,dataset,profileType,fil
     """
     
     [cp_data_treatLevel,cp_features], [l1k_data_treatLevel,l1k_features]=\
-    read_treatment_level_profiles(dataset_rootDir,dataset,profileType,filter_repCorr_params,per_plate_normalized_flag,exp_name,by_dose);
+    read_treatment_level_profiles(dataset_rootDir,dataset,profileType,filter_repCorr_params,per_plate_normalized_flag,exp_name,by_dose, filter_by_highest_dose);
     
 
     mergedProfiles_treatLevel=pd.merge(cp_data_treatLevel, l1k_data_treatLevel, how='inner',on=[labelCol])
@@ -546,3 +576,43 @@ def rename_to_genename_list_to_affyprobe(l1k_features_gn,our_l1k_prob_list,map_s
 
     return l1k_features
  
+
+def filter_data_by_highest_dose(df, dataset, modality='CellPainting',label_col=None,dose_col=None):
+
+    # if cpd_col is None:
+    if label_col is None:
+      if modality == 'CellPainting':
+      # plate_col = 'Metadata_Plate'
+      # role_col = DS_INFO_DICT[dataset][modality]['role_col']
+        label_col = DS_INFO_DICT[dataset][modality]['cpd_col']
+        mock_val = DS_INFO_DICT[dataset][modality]['mock_val']
+        n_per_dose = DS_INFO_DICT[dataset][modality]['n_per_dose']
+        dose_col = 'Metadata_mg_per_ml'
+      else:
+      # plate_col = 'det_plate'
+      # role_col = DS_INFO_DICT[dataset][modality]['role_col']
+        label_col = DS_INFO_DICT[dataset][modality]['cpd_col']
+        n_per_dose = DS_INFO_DICT[dataset][modality]['n_per_dose']
+      # mock_val = DS_INFO_DICT[dataset][modality]['mock_val']
+        dose_col = 'pert_dose'
+
+      # dose_col = 'Metadata_Plate'
+      # role_col = 'Metadata_ASSAY_WELL_ROLE'
+      # cpd_col = 'Metadata_broad_sample'
+      # mock_val = 'mock'
+
+    # n_per_dose = df[cpd_col].value_counts().median()
+
+    # df = df.copy()
+    # df = df[df[role_col] != mock_val]
+    df = df[df.groupby([label_col,dose_col]).transform('size') > (n_per_dose-1)]
+    # df = df.sort_values(by=[cpd_col], ascending=False).groupby([cpd_col]).head(1)
+
+    # take for each compound all the replicates with the highest dose. there can be more than one replicate with the highest dose
+    df = df.sort_values(by=[label_col, dose_col], ascending=False).groupby([label_col]).head(n_per_dose)
+
+    # keep only compounds with more than 4 replicates
+    df = df[df.groupby([label_col])[label_col].transform('size') > (n_per_dose-1)]
+    
+    return df
+

@@ -1,3 +1,4 @@
+from utils.plotting import get_color_from_palette
 
 BASE_DIR = '/sise/assafzar-group/assafzar/genesAndMorph'
 DATA_DIR = f'{BASE_DIR}/preprocessed_data'
@@ -14,7 +15,8 @@ DS_INFO_DICT={
             'dose_col':'Metadata_Sample_Dose',
             'role_col':'Metadata_ASSAY_WELL_ROLE',
             'plate_col':'Metadata_Plate',
-            'mock_val':'mock'
+            'mock_val':'mock',
+            'dose':'Metadata_mg_per_ml'
         },
         'L1000':{
             'cpd_col':'pert_id',
@@ -45,23 +47,40 @@ DS_INFO_DICT={
     },
 
     'TAORF':{
-        # 'has_dose':False,
+        'has_dose':False,
         'has_moa':False,
         'name':'TA-ORF-BBBC037-Rohban',
         'CellPainting':{
-            'cpd_col':'Metadata_broad_sample'},
+            'cpd_col':'Metadata_broad_sample',
+            'role_col':'Metadata_ASSAY_WELL_ROLE',
+            'mock_val':'Untreated',
+            # has both 'Untreated' and 'CTRL', why?
+            'plate_col':'Metadata_Plate'
+            },
         'L1000':{
-            'cpd_col':'pert_id'}
+            'cpd_col':'pert_id',
+            'dose_col':'pert_sample_dose',
+            'role_col':'pert_id',
+            'plate_col':'det_plate',
+            'mock_val':'DMSO'}
     },
 
     'LUAD':{
-        # 'has_dose':False,
+        'has_dose':False,
         'has_moa':False,
         'name':'LUAD-BBBC041-Caicedo',
         'CellPainting':{
-            'cpd_col':'x_mutation_status'},
+            'cpd_col':'Metadata_broad_sample',
+            'role_col':'Metadata_broad_sample_type',
+            'mock_val':'control',
+            'plate_col':'Metadata_Plate'
+            },
         'L1000':{
-            'cpd_col':'allele'},
+            'cpd_col':'pert_id',
+            'dose_col':'pert_sample_dose',
+            'role_col':'pert_id',
+            'plate_col':'det_plate',
+            'mock_val':'DMSO'}
     },
 
     'LINCS':{
@@ -73,15 +92,31 @@ DS_INFO_DICT={
             'dose_col':'Metadata_pert_id_dose',
             'role_col':'Metadata_pert_type',
             'plate_col':'Metadata_Plate',
-            'mock_val':'control'},
+            'mock_val':'control',
+            'n_per_dose':5},
         'L1000':{
             'cpd_col':'pert_id',
             'dose_col':'pert_id_dose',
             'role_col':'pert_id',
             'plate_col':'Metadata_plate_map_name',
-            'mock_val':'DMSO'}
+            'mock_val':'DMSO',
+            'n_per_dose':3}
     }
 }
+
+method_labels = {
+    'normalized_variable_selected_ae':'Anomaly',
+    'normalized_variable_selected_ae_diff':'Anomaly',
+    }
+
+methods_colors = {
+    'Anomaly':get_color_from_palette("Set2", 0),
+    'CellProfiler':get_color_from_palette("Set2", 1),
+    'Fusion': get_color_from_palette("Set2", 2),
+}
+
+methods_colors_list_for_moa = [get_color_from_palette("Set2", 1),get_color_from_palette("Set2", 0),get_color_from_palette("Set2", 2)]
+
 
 
 # profileTypes_INFO_DICT ={

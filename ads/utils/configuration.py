@@ -23,6 +23,7 @@ class GeneralArguments:
     dataset: Optional[str] = field(default='CDRP-bio', metadata={"help": "The name of the dataset"})
     run_both_profiles: Optional[bool] = field(default=False, metadata={"help": "if True, run both profiles"})
     exp_num: Optional[int] = field(default=0, metadata={"help": "experiment number"})
+    run_all_datasets: Optional[bool] = field(default=False, metadata={"help": "if True, run all datasets"})
 
     # modality: Optional[str] = field(default='CellPainting', metadata={"help": "The name of the modality"})
 
@@ -34,6 +35,7 @@ class GeneralArguments:
 @dataclass
 class DataArguments:
     modality: Optional[str] = field(default='CellPainting', metadata={"help": "The name of the modality"})
+    modality_str: Optional[str] = field(default='cp', metadata={"help": "The name of the modality"})
     profile_type: Optional[str] = field(default='augmented', metadata={"help": "The name of the dataset"})
                                     #   choices=['augmented', 'normalized', 'normalized_variable_selected'])
     test_split_ratio: Optional[float] = field(default=0.5, metadata={"help": "split ratio for test set"})
@@ -56,21 +58,21 @@ class ModelArguments:
     model_type: Optional[str] = field(default="AE", metadata={"help": "model type"})
     model_path: Optional[str] = field(default="None",
                                       metadata={"help": "If we want to load pre-trained model from path"})
-    lr: Optional[float] = field(default=0.001, metadata={"help": "learning rate"})
+    lr: Optional[float] = field(default=0.005, metadata={"help": "learning rate"})
     dropout: Optional[float] = field(default=0.0, metadata={"help": "dropout rate"})
     latent_dim: Optional[int] = field(default=16, metadata={"help": "latent dim size"})
     # l2_lambda: Optional[float] = field(default=0.0, metadata={"help": "l2 regularization lambda"})
     l2_lambda: Optional[float] = field(default=0.007, metadata={"help": "l2 regularization lambda"})
-    batch_size: Optional[int] = field(default=256, metadata={"help": "batch size"})
+    batch_size: Optional[int] = field(default=32, metadata={"help": "batch size"})
     max_epochs: Optional[int] = field(default=500, metadata={"help": "maximal number of epochs"})
     use_16bit: Optional[bool] = field(default=False, metadata={"help": "use 16bit precision"})
     # ckpt_dir: Optional[str] = field(default="ckpt/", metadata={"help": "path to save checkpoints"})
     # tb_logs_dir: Optional[str] = field(default="logs/", metadata={"help": "path to save tensorboard logs"})
     save_top_k: Optional[int] = field(default=1, metadata={"help": "save top k checkpoints"})
     tune_hyperparams: Optional[bool] = field(default=False, metadata={"help": "tune hyperparams"})
-    n_tuning_trials: Optional[int] = field(default=50, metadata={"help": "number of tuning trials"})
+    n_tuning_trials: Optional[int] = field(default=150, metadata={"help": "number of tuning trials"})
     deep_decoder: Optional[bool] = field(default=False, metadata={"help": "if True, use deep decoder"})
-
+    encoder_type: Optional[str] = field(default='default', metadata={"help": "choice of encoder, options: ['default', 'small', 'large']"})
 
 
 @dataclass
@@ -79,18 +81,19 @@ class EvalArguments:
     do_baseline: Optional[bool] = field(default=True, metadata={"help": "if True, run baseline"})
     do_original: Optional[bool] = field(default=False, metadata={"help": "if True, run original"})
     by_dose: Optional[bool] = field(default=False, metadata={"help": "if True, run by dose"})
-    z_trim: Optional[int] = field(default=10, metadata={"help": "z-score threshold for trimming"})
+    z_trim: Optional[int] = field(default=8, metadata={"help": "z-score threshold for trimming"})
     slice_id: Optional[int] = field(default=None, metadata={"help": "slice id in case of sbatch run"})
-    normalize_by_all: Optional[bool] = field(default=False, metadata={"help": "if True, normalize by all data including treatment"})
+    normalize_by_all: Optional[bool] = field(default=True, metadata={"help": "if True, normalize by all data including treatment"})
     run_dose_if_exists: Optional[bool] = field(default=True, metadata={"help": "if True, run dose if exists"})
+    filter_by_highest_dose: Optional[bool] = field(default=True, metadata={"help": "if True, run only highest dose"})
 
-    # scores: Optional[dict] = field(default=pd.Data, metadata={"help": "dict to keep scores"})
 
 @dataclass
 class MoaArguments:
     # models = field(default_factory=list, metadata={"help": "list of models to run"})
     # models: Optional[list] = field(default_factory=['lr','mlp'], metadata={"help": "list of models to run"})
     tune: Optional[bool] = field(default=False, metadata={"help": "if True, tune hyperparams"})
+    tune_first_fold: Optional[bool] = field(default=False, metadata={"help": "if True, tune hyperparams only for first fold"})
     filter_perts: Optional[str] = field(default='HighRepUnion', metadata={"help": "options: ['HighRepUnion', 'onlyCP', '']"})
     n_exps: Optional[int] = field(default=1, metadata={"help": "number of experiments"})
     do_fusion: Optional[bool] = field(default=True, metadata={"help": "if True, run fusion"})
@@ -102,6 +105,9 @@ class MoaArguments:
     exp_seed: Optional[int] = field(default=42, metadata={"help": "experiment seed"})
     rep_corr_fileName: Optional[str] = field(default='RepCorrDF', metadata={"help": "replicate correlation file name"})
     do_all_filter_groups: Optional[bool] = field(default=False, metadata={"help": "if True, run all filter groups"})
+    moa_dirname: Optional[str] = field(default='MoAprediction', metadata={"help": "moa directory name"})
+    run_l1k: Optional[bool] = field(default=True, metadata={"help": "if True, run l1k"})
+    
 
     # filter_groups = field(default_factory=['CP','l1k'], metadata={"help": "if True, filter groups with less than min_samples"})
 

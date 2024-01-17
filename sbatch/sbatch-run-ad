@@ -33,4 +33,4 @@ echo -e $CONDA_DEFAULT_ENV
 echo -e $CONDA_PREFIX
 python --version
 
-python /sise/home/alonshp/AnomalyDetectionScreening/ads/scripts/main.py --tune_hyperparams True --tune_ldims False --profile_type augmented --exp_name report_911 --deep_decoder False --dataset CDRP-bio --run_both_profiles False
+python /sise/home/alonshp/AnomalyDetectionScreening/ads/scripts/main.py --tune_hyperparams True --tune_ldims False --profile_type augmented --deep_decoder False --run_both_profiles False --run_all_datasets True --dataset LINCS --run_dose_if_exists True --filter_by_highest_dose True --exp_name 101 --latent_dim 16 --encoder small

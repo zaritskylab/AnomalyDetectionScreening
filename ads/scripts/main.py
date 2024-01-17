@@ -11,6 +11,7 @@ import logging
 import json
 import pandas as pd 
 from collections import defaultdict
+from utils.data_utils import load_data, pre_process
 
 currentdir = '/sise/home/alonshp/AnomalyDetectionScreening'
 code_dir = '/sise/home/alonshp/AnomalyDetectionScreening/ads'
@@ -74,15 +75,22 @@ def main(configs):
     if configs.general.flow in ['run_ad']:
         eval_model = True
         diff_filename = f'replicate_level_cp_{configs.data.profile_type}_ae_diff.csv'
-        if not configs.general.debug_mode and not os.path.exists(os.path.join(configs.general.output_exp_dir, diff_filename)):
+        if not os.path.exists(os.path.join(configs.general.output_exp_dir, diff_filename)) or configs.general.debug_mode:
             # save_profiles(test_treat_out_normalized_diff, output_dir, diff_filename)
             if configs.general.run_both_profiles:
                 profile_types = ['augmented', 'normalized_variable_selected']
                 for p in profile_types:
                     configs.data.profile_type = p
-                    model,losses = train_autoencoder(configs)      
+
+                    data , __ = load_data(configs.general.base_dir,configs.general.dataset,configs.data.profile_type, modality=configs.data.modality)
+                    data,features =  pre_process(data,configs,overwrite = False)
+                    dataloaders = to_dataloaders(data,configs.model.batch_size,features)
             else:
-                model,losses = train_autoencoder(configs)          
+                    data , __ = load_data(configs.general.base_dir,configs.general.dataset,configs.data.profile_type, modality=configs.data.modality)
+                    data,features =  pre_process(data,configs,overwrite = False)
+                    dataloaders = to_dataloaders(data,configs.model.batch_size,features)
+
+                        
         # configs.eval.res(losses)
         if eval_model:
             eval_results(configs)
@@ -107,8 +115,10 @@ def eval_results(configs):
         for d in doses:
             configs.eval.by_dose = d
             configs.eval.normalize_by_all = True
+            configs.general.logger.info(f'Running null distributions for dose {d} and normalize_by_all = True')
             create_null_distributions(configs)
             configs.eval.normalize_by_all = False
+            configs.general.logger.info(f'Running null distributions for dose {d} and normalize_by_all = False')
             create_null_distributions(configs)
 
         run_moa = False
@@ -134,26 +144,28 @@ if __name__ == "__main__":
     if len(sys.argv) < 2:
         
         # configs.general.exp_name = 'base'
-        exp_name = 'report_911_t'
+        exp_name = '1701_try'
 
         configs = set_configs(exp_name)
 
         # CP Profile Type options: 'augmented' , 'normalized', 'normalized_variable_selected'
         
-        # configs.general.debug_mode = True
-        configs.model.tune_hyperparams = True
+        configs.general.debug_mode = False
+        configs.general.run_all_datasets = True
+        configs.data.run_data_process = False
+        configs.model.tune_hyperparams = False
         configs.data.feature_select = True
         configs.general.tune_ldims = False
         configs.model.deep_decoder = False
         # configs.data.overwrite_data_creation = True
-        # dataset type: CDRP, CDRP-bio, LINCS, LUAD, TAORF
+        # dataset : CDRP, CDRP-bio, LINCS, LUAD, TAORF
         configs.general.flow = 'run_ad'
         # configs.general.flow = 'calc_metrics'
         configs.general.dataset = 'LINCS'
         configs.general.dataset = 'CDRP-bio'
         configs.data.corr_threshold = 0.9
-        # configs.general.dataset = 'CDRP'
-
+        # configs.general.dataset = 'LUAD'
+        # configs.general.dataset = 'TAORF'
 
         configs.data.modality = 'CellPainting'
         # configs.data.modality = 'L1000'
@@ -161,51 +173,31 @@ if __name__ == "__main__":
         # configs.data.norm_method = 'mad_robustize'
         configs.data.profile_type = 'normalized_variable_selected'
         configs.data.profile_type = 'augmented'
-        # configs.data.run_data_process = True
+        configs.moa.moa_dirname = 'MoAprediction_single'
 
-        print("Usage: python main.py <flow>")
     else:
         configs = set_configs()
 
-    configs = set_paths(configs)
+    if configs.general.run_all_datasets:
+        datasets = ['CDRP-bio', 'LUAD', 'TAORF','LINCS']
+    else:
+        datasets = [configs.general.dataset]
 
-    if configs.data.modality == 'CellPainting':
-        configs.data.modality_str = 'cp'
-    elif configs.data.modality == 'L1000':
-        configs.data.modality_str = 'l1k'
-        configs.data.do_fs = False
-    # configs.general.exp_name = revise_exp_name(configs)
-    # if configs.data.feature_selection:
-        # configs.general.exp_name += f'_fs'
+    for d in datasets:
+        configs.general.dataset = d
+        configs = set_paths(configs)
 
-    if configs.general.debug_mode:
-        configs.general.exp_name += '_debug'
-        configs.model.n_tuning_trials = 10
+        if configs.data.modality == 'CellPainting':
+            configs.data.modality_str = 'cp'
+        elif configs.data.modality == 'L1000':
+            configs.data.modality_str = 'l1k'
+            configs.data.do_fs = False
+        # configs.general.exp_name = revise_exp_name(configs)
+        # if configs.data.feature_selection:
+            # configs.general.exp_name += f'_fs'
 
-    # if configs.general.flow in ['calc_metrics']:
-    #     # configs.general.tune_ldims = True
-    #     if configs.general.tune_ldims:
-    #         configs.eval.scores = defaultdict(list)
-    #         ldims = [8,16,32,64]
-    #         for i in ldims:
-    #             configs.model.latent_dim = i
-    #             configs.general.exp_name = f'ldim_{i}'
-    #             if configs.model.tune_hyperparams:
-    #                 configs.general.exp_name += f'_{ABRVS["tune"]}'
-    #             if configs.data.norm_method == 'mad_robustize':
-    #                 configs.general.exp_name += f'_{ABRVS[configs.data.norm_method]}'
-    #                 # configs.data.profile_type += f'_{ABRVS[configs.data.norm_method]}'
-    #             configs = main(configs)
-    #     else:
-    #         configs = main(configs)
-    #         # scores = pd.DataFrame(configs.eval.scores)
+        if configs.general.debug_mode:
+            # configs.general.exp_name += '_debug'
+            configs.model.n_tuning_trials = 10
 
-    # if configs.general.flow in ['analyze']:
-    #     pass
-
-    # if configs.general.flow in ['run_moa']:
-    #     pass
-        # run_moa(configs)
-
-
-    main(configs)
+        main(configs)
