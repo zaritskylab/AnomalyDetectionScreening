@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 from datetime import date
 from typing_extensions import Literal
-from ads.utils.global_variables import BASE_DIR
+from utils.global_variables import BASE_DIR
 from collections import defaultdict
 # from transformers import TrainingArguments
 # import transformers
@@ -24,13 +24,10 @@ class GeneralArguments:
     run_both_profiles: Optional[bool] = field(default=False, metadata={"help": "if True, run both profiles"})
     exp_num: Optional[int] = field(default=0, metadata={"help": "experiment number"})
     run_all_datasets: Optional[bool] = field(default=False, metadata={"help": "if True, run all datasets"})
-
-    # modality: Optional[str] = field(default='CellPainting', metadata={"help": "The name of the modality"})
-
-    # output_dir: Optional[str] = field(default=f"/sise/assafzar-group/assafzar/genesAndMorph/processed_data/{dataset}/{modality}/{exp_name}", metadata={"help": "output directory"})
-    # res_dir: Optional[str] = field(default=f"/sise/assafzar-group/assafzar/genesAndMorph/results/{dataset}/{modality}/{exp_name}", metadata={"help": "results directory"})
-    # fig_dir: Optional[str] = field(default=f"/sise/assafzar-group/assafzar/genesAndMorph/results/{dataset}/{modality}/{exp_name}/figs", metadata={"help": "figures directory"})
-
+    overwrite_experiment: Optional[bool] = field(default=False, metadata={"help": "if True, overwrite output results"})
+    from_file: Optional[bool] = field(default=False, metadata={"help": "if True, configs loaded from file"})
+    run_parallel: Optional[bool] = field(default=False, metadata={"help": "if True, run different datasets on different GPUS"})
+    slice_id: Optional[int] = field(default=None, metadata={"help": "slice id in case of sbatch run"})
 
 @dataclass
 class DataArguments:
@@ -39,7 +36,7 @@ class DataArguments:
     profile_type: Optional[str] = field(default='augmented', metadata={"help": "The name of the dataset"})
                                     #   choices=['augmented', 'normalized', 'normalized_variable_selected'])
     test_split_ratio: Optional[float] = field(default=0.5, metadata={"help": "split ratio for test set"})
-    val_split_ratio: Optional[float] = field(default=0.2, metadata={"help": "split ratio for between train set and val set"})
+    val_split_ratio: Optional[float] = field(default=0.1, metadata={"help": "split ratio for between train set and val set"})
     normalize_condition: Optional[str] = field(default='train', metadata={"help": "if train, normalize by train set. \
                                             if DMSO, normalize by DMSO. else, normalize by all data"})
     plate_normalized: Optional[bool] = field(default=True, metadata={"help": "if True, normalize by plate"})
@@ -47,11 +44,13 @@ class DataArguments:
     norm_method: Optional[str] = field(default='standardize', metadata={"help": "normalization method."}) \
 
     run_data_process: Optional[bool] = field(default=False, metadata={"help": "if True, run data process even if data already exists"})
-    overwrite_data_creation: Optional[bool] = field(default=False, metadata={"help": "if True, overwrite data even if already exists"})
     feature_select: Optional[bool] = field(default=True, metadata={"help": "if True, run feature selection. \
                                             if False, use features selected in 'normalized_variable_selected' profile"})    
     corr_threshold: Optional[float] = field(default=0.9, metadata={"help": "correlation threshold for feature selection"})
-    remove_non_normal_features: Optional[bool] = field(default=True, metadata={"help": "if True, remove non-normal features"})           
+    # remove_non_normal_features: Optional[bool] = field(default=True, metadata={"help": "if True, remove non-normal features"})           
+    n_samples_for_training: Optional[int] = field(default=None, metadata={"help": "number of data samples for training, all if None"})
+    var_threshold: Optional[float] = field(default=10e-4, metadata={"help": "variance threshold for feature selection"})
+    
 
 @dataclass
 class ModelArguments:
@@ -63,6 +62,9 @@ class ModelArguments:
     latent_dim: Optional[int] = field(default=16, metadata={"help": "latent dim size"})
     # l2_lambda: Optional[float] = field(default=0.0, metadata={"help": "l2 regularization lambda"})
     l2_lambda: Optional[float] = field(default=0.007, metadata={"help": "l2 regularization lambda"})
+    tune_l2: Optional[bool] = field(default=True, metadata={"help": "if True, tune l2 regularization lambda as part of hyperparam tuning"})
+    l1_latent_lambda: Optional[float] = field(default=0, metadata={"help": "l1 regularization lambda for latent dim"})
+    tune_l1: Optional[bool] = field(default=False, metadata={"help": "if True, tune l1 regularization lambda as part of hyperparam tuning"})
     batch_size: Optional[int] = field(default=32, metadata={"help": "batch size"})
     max_epochs: Optional[int] = field(default=500, metadata={"help": "maximal number of epochs"})
     use_16bit: Optional[bool] = field(default=False, metadata={"help": "use 16bit precision"})
@@ -72,7 +74,8 @@ class ModelArguments:
     tune_hyperparams: Optional[bool] = field(default=False, metadata={"help": "tune hyperparams"})
     n_tuning_trials: Optional[int] = field(default=150, metadata={"help": "number of tuning trials"})
     deep_decoder: Optional[bool] = field(default=False, metadata={"help": "if True, use deep decoder"})
-    encoder_type: Optional[str] = field(default='default', metadata={"help": "choice of encoder, options: ['default', 'small', 'large']"})
+    encoder_type: Optional[str] = field(default='default', metadata={"help": "choice of encoder, options: ['default', 'shallow', 'deep']"})
+    max_epochs_in_trial: Optional[int] = field(default=100, metadata={"help": "maximal number of epochs in each trial"})
 
 
 @dataclass
@@ -81,11 +84,17 @@ class EvalArguments:
     do_baseline: Optional[bool] = field(default=True, metadata={"help": "if True, run baseline"})
     do_original: Optional[bool] = field(default=False, metadata={"help": "if True, run original"})
     by_dose: Optional[bool] = field(default=False, metadata={"help": "if True, run by dose"})
-    z_trim: Optional[int] = field(default=8, metadata={"help": "z-score threshold for trimming"})
-    slice_id: Optional[int] = field(default=None, metadata={"help": "slice id in case of sbatch run"})
+    z_trim: Optional[int] = field(default=None, metadata={"help": "z-score threshold for trimming"})
     normalize_by_all: Optional[bool] = field(default=True, metadata={"help": "if True, normalize by all data including treatment"})
-    run_dose_if_exists: Optional[bool] = field(default=True, metadata={"help": "if True, run dose if exists"})
+    run_dose_if_exists: Optional[bool] = field(default=False, metadata={"help": "if True, run dose if exists"})
     filter_by_highest_dose: Optional[bool] = field(default=True, metadata={"help": "if True, run only highest dose"})
+    calc_l1k: Optional[bool] = field(default=True, metadata={"help": "if True, calculate l1k metrics"})
+    latent_exp: Optional[bool] = field(default=False, metadata={"help": "if True, run latent dim experiment"})
+    load_corr_if_exists: Optional[bool] = field(default=True, metadata={"help": "if True, load correlation if exists"})
+    min_max_norm: Optional[bool] = field(default=False, metadata={"help": "if True, min-max normalize"})
+    rand_reps: Optional[int] = field(default=5, metadata={"help": "Number of sampling for random correlations"})
+    filter_non_reproducible: Optional[bool] = field(default=True, metadata={"help": "if True, filter non-reproducible compounds for SHAP evaluation"})
+    run_shap: Optional[bool] = field(default=True, metadata={"help": "if True, run SHAP evaluation"})
 
 
 @dataclass
@@ -107,7 +116,8 @@ class MoaArguments:
     do_all_filter_groups: Optional[bool] = field(default=False, metadata={"help": "if True, run all filter groups"})
     moa_dirname: Optional[str] = field(default='MoAprediction', metadata={"help": "moa directory name"})
     run_l1k: Optional[bool] = field(default=True, metadata={"help": "if True, run l1k"})
-    
+    moa_plate_normalized: Optional[bool] = field(default=True, metadata={"help": "if True, normalize by plate"})
+
 
     # filter_groups = field(default_factory=['CP','l1k'], metadata={"help": "if True, filter groups with less than min_samples"})
 

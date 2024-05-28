@@ -6,18 +6,20 @@ import numpy as np
 import random
 import logging
 import argparse
-from ads.utils.readProfiles import get_cp_path, get_cp_dir
-from ads.utils.configuration import DataArguments, GeneralArguments, ModelArguments, EvalArguments, MoaArguments
-from ads.utils.global_variables import DS_INFO_DICT
+from utils.readProfiles import get_cp_path, get_cp_dir
+from utils.configuration import DataArguments, GeneralArguments, ModelArguments, EvalArguments, MoaArguments
+from utils.global_variables import DS_INFO_DICT
+from utils.global_variables import ABRVS
 import transformers
 import pandas as pd
 import openpyxl as pxl
 from openpyxl.utils import get_column_letter
 import os
 import json
-from ads.utils.global_variables import ABRVS
+
 from argparse import ArgumentParser
 from pytorch_lightning import seed_everything
+import pickle
 
 
 ################################################################################
@@ -27,8 +29,8 @@ def revise_exp_name(configs):
         configs.general.exp_name += f'_{ABRVS["tune"]}'
     if configs.data.norm_method == 'mad_robustize':
         configs.general.exp_name += f'_{ABRVS[configs.data.norm_method]}'
-    if configs.model.l2_lambda>0.01:
-        configs.general.exp_name += f'_l2_{configs.model.l2_lambda}'
+    # if configs.model.l2_lambda>0.01:
+        # configs.general.exp_name += f'_l2_{configs.model.l2_lambda}'
     if configs.model.deep_decoder:
         configs.general.exp_name += f'_dd'
         
@@ -40,7 +42,7 @@ def revise_exp_name(configs):
 
 ################################################################################
 
-def add_exp_suffix(profile_type, by_dose,normalize_by_all=False):
+def add_exp_suffix(profile_type, by_dose,normalize_by_all=False, z_trim=None, min_max_norm=False):
 
     suffix = ''
     
@@ -52,6 +54,10 @@ def add_exp_suffix(profile_type, by_dose,normalize_by_all=False):
         suffix+= '_d'
     if normalize_by_all:
         suffix+= '_ba'
+    if z_trim is not None:
+        suffix+= f'_z{str(z_trim)}'
+    if min_max_norm:
+        suffix+= '_mm' 
         
     return suffix
 
@@ -59,7 +65,6 @@ def add_exp_suffix(profile_type, by_dose,normalize_by_all=False):
 ################################################################################
 
 def set_configs(exp_name = ''):
-    
     
     parser = transformers.HfArgumentParser((GeneralArguments, DataArguments,ModelArguments, EvalArguments,MoaArguments))
     general_args, data_args,model_args, eval_args, moa_args = parser.parse_args_into_dataclasses()
@@ -75,20 +80,41 @@ def set_configs(exp_name = ''):
         configs.general.exp_name = exp_name
     exp_name = revise_exp_name(configs)
     configs.general.exp_name = exp_name
+    configs.general.output_exp_dir = f"{configs.general.base_dir}/anomaly_output/{configs.general.dataset}/{configs.data.modality}/{configs.general.exp_name}/"
     # configs = set_paths(configs)
 
     # configs_from_file = get_configs(configs.general.output_exp_dir)
     # if configs_from_file is not None:
     #     configs = configs_from_file
-
     set_seed(configs.general.seed)
+        # return None
+
     return configs
+
+################################################################################
+
+def save_configs(configs):
+    config_path = os.path.join(configs.general.output_exp_dir,'args.pkl')
+    
+    with open(config_path, 'wb') as f:
+        pickle.dump(configs, f)
+    
+    # save text file with all params    
+    with open(os.path.join(configs.general.output_exp_dir, 'params.txt'), 'w') as f:
+        # skip line for each parameter
+        for k,v in configs.__dict__.items():
+            f.write(f'{k}:\n')
+
+            for k2,v2 in v.__dict__.items():
+                # add indetation for each sub-parameter
+                f.write(f'     {k2}: {v2}\n')
+
 
 ################################################################################
 
 def get_configs(exp_dir):
     # path = get_cp_dir(DATASET_ROOT_DIR,DS_INFO_DICT[DATASET]['name'],exp_name)
-    config_path = os.path.join(exp_dir,'configs.json')
+    config_path = os.path.join(exp_dir,'args.pkl')
     
     if os.path.exists(config_path):  
         parser = ArgumentParser()
@@ -96,13 +122,12 @@ def get_configs(exp_dir):
         args, unknown = parser.parse_known_args()
         # args = parser.parse_args()  
 
-        with open(config_path, 'r') as f:
-            args.__dict__ = json.load(f)
-        # with open(config_path) as f:
-            # configs = json.load(f)
+        with open(config_path, 'rb') as f:
+            return pickle.load(f)
+        
     else:
         return None
-    return args
+    
 
 ################################################################################
 
@@ -140,7 +165,7 @@ def set_configs_jupyter(exp_name = ''):
 
     # configs_from_file = get_configs(configs.general.output_exp_dir)
     # if configs_from_file is not None:
-    #     configs = configs_from_file
+        # configs = configs_from_file
 
     set_seed(configs.general.seed)
     
@@ -188,7 +213,8 @@ def set_paths(configs):
     os.makedirs(configs.general.fig_dir, exist_ok=True)
 
     assert_configs(configs)
-    configs = set_logger(configs)
+    if not hasattr(configs.general,'logger'):
+        configs = set_logger(configs)
     # os.makedirs(configs.general.processed_data_dir, exist_ok=True)
 
     return configs
@@ -213,9 +239,9 @@ def output_path(configs):
 
 
 def set_seed(seed):
-    torch.manual_seed(seed)
-    np.random.seed(seed)
-    random.seed(seed)
+    # torch.manual_seed(seed)
+    # np.random.seed(seed)
+    # random.seed(seed)
     seed_everything(seed)
 
 
@@ -254,115 +280,7 @@ def saveAsNewSheetToExistingFile(filename,newDF,newSheetName):
     return
 
 
-# ------------------------------------------------------
 
-# saveDF_to_CSV_GZ_no_timestamp
-def saveDF_to_CSV_GZ_no_timestamp(df,filename):
-    from gzip import GzipFile
-    from io import TextIOWrapper
-    with TextIOWrapper(GzipFile(filename, 'w', mtime=0), encoding='utf-8') as fd:
-        df.to_csv(fd,index=False,compression='gzip')
-        
-    return
-
-
-# Save the input dataframe to the specified sheet name of filename file
-def saveAsNewSheetToExistingFile(filename,newDF,newSheetName):
-    if os.path.exists(filename):
-
-        excel_book = pxl.load_workbook(filename)
-        
-#         print(excel_book.sheetnames)
-#         if 'cp-cd' in excel_book.sheetnames:
-#             print('ghalate')
-
-        if newSheetName in excel_book.sheetnames:
-            del excel_book[newSheetName]
-        
-        with pd.ExcelWriter(filename, engine='openpyxl') as writer:
-            # Your loaded workbook is set as the "base of work"
-            writer.book = excel_book
-
-            # Loop through the existing worksheets in the workbook and map each title to\
-            # the corresponding worksheet (that is, a dictionary where the keys are the\
-            # existing worksheets' names and the values are the actual worksheets)
-#             print(excel_book.worksheets)
-            writer.sheets = {worksheet.title: worksheet for worksheet in excel_book.worksheets if newSheetName not in worksheet}
-
-            # Write the new data to the file without overwriting what already exists
-            newDF.to_excel(writer, newSheetName)
-
-            # Save the file
-            writer.save()
-    else:
-        newDF.to_excel(filename, newSheetName)
-        
-    print(newSheetName,' saved!')
-    return
-
-def write_dataframe_to_excel_old(filename, dataframe, sheet_name):
-
-    if os.path.exists(filename):
-        # Load the existing Excel file
-        excel_file = pd.ExcelFile(filename)
-        # writer = pd.ExcelWriter(filename)
-        writer = pd.ExcelWriter(filename, engine='openpyxl')
-
-        writer.book = excel_file.book
-
-        # Check if the sheet_name already exists
-        if sheet_name in excel_file.sheet_names:
-            print(f'Sheet "{sheet_name}" already exists in the Excel file. Adding new data to the existing sheet.')
-            startrow = excel_file.parse(sheet_name).shape[0] + 1
-        else:
-            startrow = 0
-
-        # Write the DataFrame to the specified sheet_name
-        dataframe.to_excel(writer, sheet_name=sheet_name, startrow=startrow, index=False)
-
-        # Save the changes and close the writer
-        writer.save()
-        writer.close()
-
-
-        print(f'DataFrame successfully written to sheet "{sheet_name}" in Excel file "{filename}".')
-    else:
-        # If the file does not exist, create a new Excel file with the given sheet
-        dataframe.to_excel(filename, sheet_name=sheet_name, index=False)
-        print(f'Excel file "{filename}" created with sheet "{sheet_name}".')
-
-import pandas as pd
-
-
-def write_dataframe_to_excel_old(filename, sheet_name, dataframe):
-    try:
-        # Load the existing Excel file (if it exists)
-        excel_file = pd.ExcelFile(filename)
-
-        # Create a Pandas ExcelWriter object with openpyxl engine
-        with pd.ExcelWriter(filename, engine='openpyxl') as writer:
-            writer.book = excel_file.book if excel_file else None
-
-            # Check if the sheet_name already exists
-            if sheet_name in writer.book.sheetnames:
-                print(f'Sheet "{sheet_name}" already exists in the Excel file. Adding new data to the existing sheet.')
-                startrow = writer.book[sheet_name].max_row + 1
-            else:
-                startrow = 0
-
-            # Write the DataFrame to the specified sheet_name
-            dataframe.to_excel(writer, sheet_name=sheet_name, startrow=startrow, index=False)
-
-            # Save the changes
-            writer.save()
-
-        print(f'DataFrame successfully written to sheet "{sheet_name}" in Excel file "{filename}".')
-    except FileNotFoundError:
-        # If the file does not exist, create a new Excel file with the given sheet
-        dataframe.to_excel(filename, sheet_name=sheet_name, index=False)
-        print(f'Excel file "{filename}" created with sheet "{sheet_name}".')
-
-    
 
 def write_dataframe_to_excel(filename, sheet_name, dataframe,append_new_data_if_sheet_exists=True):
 

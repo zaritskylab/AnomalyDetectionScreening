@@ -5,8 +5,8 @@
 ### To ignore, just add another # - like ##SBATCH
 ##################
 
-#SBATCH --partition rtx3090			### specify partition name where to run a job. debug: 2 hours limit; short: 7 days limit; gtx1080: 7 days
-#SBATCH --time 1-00:00:00			### limit the time of job running, partition limit can override this. Format: D-H:MM:SS
+#SBATCH --partition main			### specify partition name where to run a job. debug: 2 hours limit; short: 7 days limit; gtx1080: 7 days
+#SBATCH --time 3-00:00:00			### limit the time of job running, partition limit can override this. Format: D-H:MM:SS
 #SBATCH --job-name run_ad	### name of the job
 #SBATCH --output output/run_ad/%j-%a.out			### output log for running job - %J for job number
 #SBATCH --mail-user=alonshp@post.bgu.ac.il	### user email for sending job status
@@ -19,6 +19,7 @@
 
 ##SBATCH --array=0-997%50
 #SBATCH --array=0
+#SBATCH --array=0-3
 ### Print some data to output file ###
 echo `date`
 echo -e "\nSLURM_JOBID:\t\t" $SLURM_JOBID
@@ -33,4 +34,4 @@ echo -e $CONDA_DEFAULT_ENV
 echo -e $CONDA_PREFIX
 python --version
 
-python /sise/home/alonshp/AnomalyDetectionScreening/ads/scripts/main.py --tune_hyperparams True --run_all_datasets True --filter_by_highest_dose True  --calc_l1k True  --run_all_datasets True --plate_normalized False --exp_name final_94_nvs --profile_type normalized_variable_selected
+python /sise/home/alonshp/AnomalyDetectionScreening/ads/scripts/n_samples_analysis.py --slice_id $SLURM_ARRAY_TASK_ID --exp_name analysis_n_samples285 --plate_normalized False --tune_hyperparams True --encoder_type deep

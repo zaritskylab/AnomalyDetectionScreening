@@ -2,7 +2,20 @@
 checkpoints/
 ads/logs/
 ads/ckpt/
+ads/old/
+ads/utils/utils_unused.py
+ads/scripts/experiments/**
+ads/scripts/n_samples_analysis.py
+ads/scripts/whichGPU.py
+ads/data_layer/dataset.py
+ads/data_layer/image_dataset.py
+2.MoA_prediction/
+notebooks/2a-Modality_Integration_CDRP_train.ipynb
+notebooks/umap_analysis.ipynb
+notebooks/interpret_MoAs copy.ipynb
+notebooks/calc_mAP.ipynb
+notebooks/shap_analysis.ipynb
 **/__pycache__/
-.vs_code/
+.vscode/
 **/.ipynb_checkpoints/
 **.png

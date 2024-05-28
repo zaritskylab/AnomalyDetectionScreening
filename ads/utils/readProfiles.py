@@ -7,13 +7,9 @@ import sklearn.decomposition
 from sklearn import preprocessing
 from sklearn.metrics import pairwise_distances
 from pycytominer.cyto_utils import output
-
-# from utils.normalize_funcs import standardize_per_catX
-# from normalize_funcs import standardize_per_catX
-
+import pickle
 #'dataset_name',['folder_name',[cp_pert_col_name,l1k_pert_col_name],[cp_control_val,l1k_control_val]]
 # from utils.eval_utils import filter_data_by_highest_dose
-from dataset_paper_repo.utils.normalize_funcs import standardize_per_catX
 from utils.global_variables import DS_INFO_DICT
 
 
@@ -75,6 +71,79 @@ def save_profiles(df, dataset_rootDir, filename, float_format = "%.5g", compress
             float_format=float_format,
         )
 
+
+def read_replicate_single_modality_level_profiles(dataset_rootDir,dataset,profileType,per_plate_normalized_flag,exp_name='',modality='CellPainting'):
+    """
+    Reads replicate level CSV files in the form of a dataframe
+    Extract measurments column names for a single modality
+    Remove columns with low variance (<thrsh_var)
+    Remove columns with more NaNs than a certain threshold (>null_vals_ratio)
+
+    Inputs:
+    dataset_rootDir: datasets root dir
+    dataset: any from the available list of ['LUAD', 'TAORF', 'LINCS', 'CDRP-bio', 'CDRP']
+    profileType:   Cell Painting profile type that can be 'augmented' , 'normalized', 'normalized_variable_selected'
+    per_plate_normalized_flag: if True it will standardize data per plate
+
+    Output:
+    cp_data_repLevel: dataframes with all the annotations available in the raw data
+    """
+
+    dataDir=dataset_rootDir+'/preprocessed_data/'+ds_info_dict[dataset][0]+'/'
+
+    if modality == 'L1000':
+        modality_str = 'l1k'
+        filename = 'replicate_level_l1k.csv'
+    else:
+        modality_str = 'cp'
+        filename = 'replicate_level_cp_'+profileType+'.csv'
+    if len(exp_name)>0:
+        cp_dataDir = dataset_rootDir+'/anomaly_output/'+dataset
+        cp_path = os.path.join(cp_dataDir,modality,exp_name,filename)
+    else:
+        if dataset == 'LUAD':
+            cp_path = dataDir+modality+'/'+filename
+        else:
+            cp_path = dataDir+modality+'/'+filename+'.gz'
+        # cp_path = os.path.join(dataDir,modality,filename+'.gz')
+
+    # print(f' loading {cp_path}')
+    # if not os.path.exists(cp_path):
+        # raise ValueError("File not found: {}".format(cp_path))
+        # profileType = 'augmented'
+        # cp_path = dataDir + '/CellPainting/replicate_level_cp_' + profileType + '.csv.gz'
+    if dataset == 'LUAD' and len(exp_name) == 0:
+        cp_data_repLevel = pd.read_csv(cp_path)
+    else:
+        cp_data_repLevel = pd.read_csv(cp_path, compression='gzip')
+
+    if modality == 'L1000':
+        features = cp_data_repLevel.columns[cp_data_repLevel.columns.str.contains("_at")].tolist()
+    else:
+        features = cp_data_repLevel.columns[cp_data_repLevel.columns.str.contains("Cells_|Cytoplasm_|Nuclei_")].tolist()
+        
+    ########## removes nan and inf values
+    cp_data_repLevel=cp_data_repLevel.replace([np.inf, -np.inf], np.nan)
+
+    #
+    cols2remove=[i for i in features if cp_data_repLevel[i].isnull().sum(axis=0)>0.05]
+    cp_data_repLevel.drop(cols2remove, axis=1, inplace=True);
+    features = list(set(features) - set(cols2remove))
+    cp_data_repLevel[features] = cp_data_repLevel[features].interpolate()
+    #     cp=cp.fillna(cp.median())
+
+    ################ Per plate scaling
+    if per_plate_normalized_flag:
+        plate_col = DS_INFO_DICT[dataset][modality]['plate_col']
+        cp_data_repLevel = standardize_per_catX(cp_data_repLevel,plate_col,features);
+        # l1k_data_repLevel = standardize_per_catX(l1k_data_repLevel,'det_plate',l1k_features);
+
+        # cols2removeCP=[i for i in cp_features if (cp_data_repLevel[i].isnull().sum(axis=0)/cp_data_repLevel.shape[0])>0.05]
+        # cp_data_repLevel=cp_data_repLevel.drop(cols2removeCP, axis=1);
+        # cp_features = list(set(cp_features) - set(cols2removeCP))
+        # cp_data_repLevel[cp_features] = cp_data_repLevel[cp_features].interpolate()
+
+    return [cp_data_repLevel,features]
 
 ################################################################################
 def read_replicate_level_profiles(dataset_rootDir,dataset,profileType,per_plate_normalized_flag,exp_name=''):
@@ -193,7 +262,7 @@ def extract_metadata_column_names(cp_data, l1k_data):
     return cp_meta_col_names, l1k_meta_col_names
 
 ################################################################################
-def read_treatment_level_profiles(dataset_rootDir,dataset,profileType,filter_repCorr_params,per_plate_normalized_flag,exp_name='',by_dose=True, filter_by_highest_dose=False):
+def read_treatment_level_profiles(dataset_rootDir,dataset,profileType,filter_repCorr_params,per_plate_normalized_flag,exp_name='',by_dose=True, filter_by_highest_dose=False, save_reproducible=False, save_n_samples_per_MoA=False, filter_perts='highRepOverlap'):
 
     """
     Reads replicate level CSV files (scaled replicate level profiles per plate)
@@ -259,16 +328,19 @@ def read_treatment_level_profiles(dataset_rootDir,dataset,profileType,filter_rep
     
     # add dose to sheetname if not included
     # profile_types_filtered = [a+'_d' for a in profile_types_filtered if by_dose and a.split('_')[-1] != 'd']
-
+    # if save_n_samples_per_MoA:
+        # n_samples_per_MoA = cp_data_repLevel.groupby('Metadata_moa').size().sort_values(ascending=False)
+        # path = f'{dataset_rootDir}/results/{dataset}/CellPainting/{exp_name}/n_samples_per_MoA_pre_filtering.csv'
+        # n_samples_per_MoA.to_csv(path)
     ###### remove perts with low rep corr
     if filter_perts=='highRepOverlap':    
-        highRepPerts = highRepFinder(dataset,'intersection',repCorrFilePath,profile_types_filtered=profile_types_filtered) + ['negcon'];
+        highRepPerts = highRepFinder(dataset,'intersection',repCorrFilePath,profile_types_filtered=profile_types_filtered,save_reproducible=save_reproducible) + ['negcon'];
         
         cp_data_repLevel=cp_data_repLevel[cp_data_repLevel['PERT'].isin(highRepPerts)].reset_index()
         l1k_data_repLevel=l1k_data_repLevel[l1k_data_repLevel['PERT'].isin(highRepPerts)].reset_index()  
         
     elif filter_perts=='highRepUnion':
-        highRepPerts = highRepFinder(dataset,'union',repCorrFilePath,profile_types_filtered=profile_types_filtered) + ['negcon'];
+        highRepPerts = highRepFinder(dataset,'union',repCorrFilePath,profile_types_filtered=profile_types_filtered, save_reproducible=save_reproducible) + ['negcon'];
         
         cp_data_repLevel=cp_data_repLevel[cp_data_repLevel['PERT'].isin(highRepPerts)].reset_index()
         l1k_data_repLevel=l1k_data_repLevel[l1k_data_repLevel['PERT'].isin(highRepPerts)].reset_index()      
@@ -311,7 +383,7 @@ def read_treatment_level_profiles(dataset_rootDir,dataset,profileType,filter_rep
 
 
 ################################################################################
-def read_paired_treatment_level_profiles(dataset_rootDir,dataset,profileType,filter_repCorr_params,per_plate_normalized_flag,exp_name='',by_dose=True, filter_by_highest_dose=False):
+def read_paired_treatment_level_profiles(dataset_rootDir,dataset,profileType,filter_repCorr_params,per_plate_normalized_flag,exp_name='',by_dose=True, filter_by_highest_dose=False, save_n_samples_per_MoA=False, filter_perts='highRepOverlap'):
 
     """
     Reads treatment level profiles
@@ -329,7 +401,7 @@ def read_paired_treatment_level_profiles(dataset_rootDir,dataset,profileType,fil
     """
     
     [cp_data_treatLevel,cp_features], [l1k_data_treatLevel,l1k_features]=\
-    read_treatment_level_profiles(dataset_rootDir,dataset,profileType,filter_repCorr_params,per_plate_normalized_flag,exp_name,by_dose, filter_by_highest_dose);
+    read_treatment_level_profiles(dataset_rootDir,dataset,profileType,filter_repCorr_params,per_plate_normalized_flag,exp_name,by_dose, filter_by_highest_dose, save_n_samples_per_MoA=save_n_samples_per_MoA);
     
 
     mergedProfiles_treatLevel=pd.merge(cp_data_treatLevel, l1k_data_treatLevel, how='inner',on=[labelCol])
@@ -375,7 +447,7 @@ def generate_random_match_of_replicate_pairs(cp_data_repLevel, l1k_data_repLevel
     return mergedProfiles_repLevel
 
 ################################################################################
-def highRepFinder(dataset,how,repCorrFilePath, profile_types_filtered=None):
+def highRepFinder(dataset,how,repCorrFilePath, profile_types_filtered=None, save_reproducible=False):
     """
     This function reads pre calculated and saved Replicate Correlation values file and filters perturbations
     using one of the following filters:
@@ -395,8 +467,12 @@ def highRepFinder(dataset,how,repCorrFilePath, profile_types_filtered=None):
     repCorDF=pd.read_excel(repCorrFilePath, sheet_name=None)
     
     repCorrs = {}
+    all_profiles_acronym = ''
     if profile_types_filtered is not None:
         for s in profile_types_filtered:
+            all_profiles_acronym += s[0]
+            if 'index' in repCorDF[s].keys():
+                repCorDF[s].rename(columns={'index':'Unnamed: 0'}, inplace=True)
             # repCorDF[s]=repCorDF[s].rename(columns={'Unnamed: 0':'pert_id'})
             # repCorDF[s]=repCorDF[s].set_index('pert_id')
             repCorrs[s] = {}
@@ -436,7 +512,9 @@ def highRepFinder(dataset,how,repCorrFilePath, profile_types_filtered=None):
             highRepPerts=list(set(l1kHighList) | set(cpHighList))
             print('l1k: from ',cpRepDF.shape[0],' to ',len(l1kHighList))
             print('CP and l1k high rep union: ',len(highRepPerts))        
-            
+
+    if save_reproducible:
+        pickle.dump(highRepPerts, open(f'highRepPerts_{all_profiles_acronym}_.pkl', 'wb'))
         
     return highRepPerts
 
@@ -507,7 +585,7 @@ def read_paired_replicate_level_profiles(dataset_rootDir,dataset,profileType,nRe
     return mergedProfiles_repLevel,cp_features,l1k_features
 
 
-def merge_profiles(cp_data_rep_level, l1k_data_rep_level,repCorrFilePath, profile_types_filtered,nRep,filter_perts = 'highRepUnion'):
+def merge_profiles(cp_data_rep_level, l1k_data_rep_level,repCorrFilePath, profile_types_filtered,nRep,filter_perts = 'highRepUnion', save_reproducible = False):
 
 
     # ############ rename columns that should match to PERT
@@ -525,16 +603,18 @@ def merge_profiles(cp_data_rep_level, l1k_data_rep_level,repCorrFilePath, profil
 
     ###### remove perts with low rep corr
     if filter_perts=='highRepOverlap':    
-        highRepPerts = highRepFinder(dataset,'intersection',repCorrFilePath,profile_types_filtered=profile_types_filtered) + ['negcon'];
+        highRepPerts = highRepFinder(dataset,'intersection',repCorrFilePath,profile_types_filtered=profile_types_filtered, save_reproducible = save_reproducible) + ['negcon'];
         
         cp_data_repLevel=cp_data_repLevel[cp_data_repLevel['PERT'].isin(highRepPerts)].reset_index()
         l1k_data_repLevel=l1k_data_repLevel[l1k_data_repLevel['PERT'].isin(highRepPerts)].reset_index()  
         
     elif filter_perts=='highRepUnion':
-        highRepPerts = highRepFinder(dataset,'union',repCorrFilePath, profile_types_filtered=profile_types_filtered) + ['negcon'];
+        highRepPerts = highRepFinder(dataset,'union',repCorrFilePath, profile_types_filtered=profile_types_filtered, save_reproducible = save_reproducible) + ['negcon'];
         
         cp_data_repLevel=cp_data_repLevel[cp_data_repLevel['PERT'].isin(highRepPerts)].reset_index()
-        l1k_data_repLevel=l1k_data_repLevel[l1k_data_repLevel['PERT'].isin(highRepPerts)].reset_index()      
+        l1k_data_repLevel=l1k_data_repLevel[l1k_data_repLevel['PERT'].isin(highRepPerts)].reset_index()   
+    else:
+        raise ValueError('filter_perts should be either "highRepOverlap" or "highRepUnion" ')   
     
 
     mergedProfiles_repLevel=generate_random_match_of_replicate_pairs(cp_data_repLevel, l1k_data_repLevel,nRep)
@@ -607,6 +687,7 @@ def filter_data_by_highest_dose(df, dataset, modality='CellPainting',label_col=N
     # df = df[df[role_col] != mock_val]
     df = df[df.groupby([label_col,dose_col]).transform('size') > (n_per_dose-1)]
     # df = df.sort_values(by=[cpd_col], ascending=False).groupby([cpd_col]).head(1)
+    # a = df.sort_values(by=[dose_col,label_col], ascending=False).groupby([label_col]).head(10)
 
     # take for each compound all the replicates with the highest dose. there can be more than one replicate with the highest dose
     df = df.sort_values(by=[label_col, dose_col], ascending=False).groupby([label_col]).head(n_per_dose)
@@ -615,4 +696,13 @@ def filter_data_by_highest_dose(df, dataset, modality='CellPainting',label_col=N
     df = df[df.groupby([label_col])[label_col].transform('size') > (n_per_dose-1)]
     
     return df
+
+def standardize_per_catX(df,column_name,cp_features):
+# column_name='Metadata_Plate'
+#     cp_features=df.columns[df.columns.str.contains("Cells_|Cytoplasm_|Nuclei_")]
+    df_scaled_perPlate=df.copy()
+    df_scaled_perPlate[cp_features]=\
+    df[cp_features+[column_name]].groupby(column_name)\
+    .transform(lambda x: (x - x.mean()) / x.std()).values
+    return df_scaled_perPlate
 

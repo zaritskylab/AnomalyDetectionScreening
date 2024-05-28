@@ -31,4 +31,4 @@ source activate pytorch_ads				### activating environment, environment must be c
 echo -e $CONDA_DEFAULT_ENV
 echo -e $CONDA_PREFIX
 python --version
-python /home/alonshp/AnomalyDetectionScreening/ads/scripts/classify_moa.py --slice_id $SLURM_ARRAY_TASK_ID --n_exps 10 --min_samples 9 --folds 5 --flow run_moa --do_all_filter_groups True --run_dose_if_exists False --by_dose False --tune True --filter_by_highest_dose True --dataset LINCS --exp_name 101_t_le
+python /home/alonshp/AnomalyDetectionScreening/ads/scripts/classify_moa.py --slice_id $SLURM_ARRAY_TASK_ID --n_exps 10 --min_samples 4 --folds 5 --flow run_moa --do_all_filter_groups False --run_dose_if_exists False --by_dose False --filter_by_highest_dose True --dataset LINCS --exp_name 2752_t --overwrite_experiment False --tune True --normalize_by_all True

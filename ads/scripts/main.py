@@ -8,118 +8,107 @@ import os
 import transformers
 import argparse
 import logging
-import json
+import pickle
 import pandas as pd 
 from collections import defaultdict
-from utils.data_utils import load_data, pre_process
+from data_layer.data_utils import load_data, pre_process, to_dataloaders
+from utils.general import save_configs,get_configs
+from interpret_layer.shap_anomalies import run_anomaly_shap
+import matplotlib.pyplot as plt
+import seaborn as sns
 
-currentdir = '/sise/home/alonshp/AnomalyDetectionScreening'
-code_dir = '/sise/home/alonshp/AnomalyDetectionScreening/ads'
+plt.rcParams.update(plt.rcParamsDefault)
+plt.style.use('seaborn-v0_8-colorblind')
+sns.set_theme(style='ticks',context='paper', font_scale=1.5)
 
-print(currentdir)
+# currentdir = '/sise/home/alonshp/AnomalyDetectionScreening'
+# code_dir = '/sise/home/alonshp/AnomalyDetectionScreening/ads'
 
+# sys.path.insert(0, os.getcwd())
+# sys.path.insert(0, currentdir)
+# sys.path.insert(0, code_dir)
 
-# currentdir = os.path.dirname('home/alonshp/AnomalyDetectionScreeningLocal/')
-# print(currentdir)
-sys.path.insert(0, os.getcwd())
-sys.path.insert(0, currentdir)
-sys.path.insert(0, code_dir)
-
-from run_ad import train_autoencoder
-# from ads.utils.configuration import DataArguments, GeneralArguments, ModelArguments, EvalArguments
-from ads.utils.general import set_seed, set_logger, output_path, set_paths, assert_configs, set_configs, revise_exp_name
-# from ads.scripts.calc_repreducibility import main as calc_reproducibility
-# from ads.scripts.classify_moa import main as run_moa
-from ads.utils.global_variables import ABRVS,DS_INFO_DICT
-from ads.utils.plotting import plot_latent_effect
-from create_null_distribution import main as create_null_distributions
-from classify_moa import run_classifier
-# from qa_generator.utils.data import get_dataloader, generate_ocr
-# from ads.utils.general import output_path, set_seed, set_logger
-# from readProfiles import *
-# from pred_models import *
-# from data import load_data
+from scripts.run_ad import main as run_ad
+# from utils.configuration import DataArguments, GeneralArguments, ModelArguments, EvalArguments
+from utils.general import set_seed, set_logger, output_path, set_paths, assert_configs, set_configs, revise_exp_name
+# from scripts.calc_repreducibility import main as calc_reproducibility
+# from scripts.classify_moa import main as run_moa
+from utils.global_variables import ABRVS,DS_INFO_DICT, HYPER_PARAMS
+from scripts.create_null_distribution import main as create_null_distributions
+from scripts.classify_moa import run_classifier
 
 pd.set_option('display.max_rows', 100)
+# sns.set_context("paper",font_scale = 1.8, rc={"font.size":8,"axes.titlesize":16,"axes.labelsize":16})
 logger = logging.getLogger(__name__)
 
-  
 
 def main(configs):
 
-    # configs.general.logging_dir = configs.general.output_exp_dir = output_path(configs)
-    # configs = set_paths(configs)
-    # assert_configs(configs)
     configs.general.logging_dir = configs.general.output_exp_dir
-    # print(configs.general.output_exp_dir)
-    # configs = set_logger(configs)
-    # os.makedirs(configs.general.output_exp_dir, exist_ok=True)
-    # os.makedirs(configs.general.res_dir, exist_ok=True)
-
-    if configs.general.debug_mode == False:
-        # with open('commandline_args.txt', 'w') as f:
-            # json.dump(args.__dict__, f, indent=2)
-        with open(os.path.join(configs.general.output_exp_dir, 'configs.json'), 'w', encoding='utf-8') as f:
-            json.dump(str(configs), f, ensure_ascii=False, indent=4)
 
     configs.general.logger.info(os.getcwd())
-    configs.general.logger.info('*' * 100)
+    configs.general.logger.info('*' * 10)
     configs.general.logger.info(configs)
-    configs.general.logger.info('*' * 100)
+    configs.general.logger.info('*' * 10)
 
-    # if configs.general.flow in ['eval']:
-    #     # model = load_model(configs)
-    #     dataset = load_datasets(configs)
-    #     dataloader = get_dataloader(dataset, configs)
-    #     eval_model(model, dataloader, configs)
     if configs.general.flow in ['run_ad']:
         eval_model = True
-        diff_filename = f'replicate_level_cp_{configs.data.profile_type}_ae_diff.csv'
-        if not os.path.exists(os.path.join(configs.general.output_exp_dir, diff_filename)) or configs.general.debug_mode:
+        diff_filename = f'replicate_level_cp_{configs.data.profile_type}_ae_diff.csv' 
+        run_flag = not os.path.exists(os.path.join(configs.general.output_exp_dir, diff_filename)) or configs.general.overwrite_experiment
+        if run_flag or configs.general.debug_mode:
             # save_profiles(test_treat_out_normalized_diff, output_dir, diff_filename)
             if configs.general.run_both_profiles:
                 profile_types = ['augmented', 'normalized_variable_selected']
                 for p in profile_types:
                     configs.data.profile_type = p
-
-                    data , __ = load_data(configs.general.base_dir,configs.general.dataset,configs.data.profile_type, modality=configs.data.modality)
-                    data,features =  pre_process(data,configs,overwrite = False)
-                    dataloaders = to_dataloaders(data,configs.model.batch_size,features)
+                    run_ad(configs)
             else:
-                    data , __ = load_data(configs.general.base_dir,configs.general.dataset,configs.data.profile_type, modality=configs.data.modality)
-                    data,features =  pre_process(data,configs,overwrite = False)
-                    dataloaders = to_dataloaders(data,configs.model.batch_size,features)
+                run_ad(configs)
 
                         
         # configs.eval.res(losses)
-        if eval_model:
-            eval_results(configs)
+        if eval_model and not configs.general.debug_mode:
+            data_reps = configs.data.data_reps
+            res = eval_results(configs,data_reps=configs.data.data_reps)
+            if configs.eval.run_shap:
+                run_anomaly_shap(configs, filter_non_reproducible=configs.eval.filter_non_reproducible)
+            # run only vs. cell profiler baseline
+            if data_reps != ['ae_diff','baseline']:
+                _ = eval_results(configs)
     elif configs.general.flow in ['eval_model']:
-        eval_results(configs)
+        res = eval_results(configs)
+
     else:
         raise Exception('Not recognized flow')
         
-    return configs
+    return res
     # exit(0)
 
-def eval_results(configs):
-
-        Types = ['ae_diff', 'baseline']
-        data_reps = [f'{configs.data.profile_type}_{t}' for t in Types]
+def eval_results(configs,data_reps = None):
+    
+        data_reps = configs.data.data_reps
 
         if configs.eval.run_dose_if_exists and DS_INFO_DICT[configs.general.dataset]['has_dose']:
             doses = [False,True]
         else:
             doses = [False]
 
+        rc = defaultdict(dict)
         for d in doses:
-            configs.eval.by_dose = d
-            configs.eval.normalize_by_all = True
-            configs.general.logger.info(f'Running null distributions for dose {d} and normalize_by_all = True')
-            create_null_distributions(configs)
-            configs.eval.normalize_by_all = False
-            configs.general.logger.info(f'Running null distributions for dose {d} and normalize_by_all = False')
-            create_null_distributions(configs)
+                configs.eval.by_dose = d
+                configs.eval.z_trim = None
+                configs.eval.normalize_by_all = True
+                configs.general.logger.info(f'Running null distributions for dose {d} and normalize_by_all = True')
+                rc = create_null_distributions(configs,data_reps=data_reps)
+                # configs.eval.normalize_by_all = False
+                # configs.general.logger.info(f'Running null distributions for dose {d} and normalize_by_all = False')
+                # _ =  create_null_distributions(configs,data_reps=data_reps)
+                # configs.eval.z_trim = 8
+                # configs.general.logger.info(f'Running null distributions for dose {d} and z_trim = 8')
+                # _ =  create_null_distributions(configs,data_reps=data_reps)
+        
+
+
 
         run_moa = False
         if run_moa:
@@ -127,66 +116,108 @@ def eval_results(configs):
                 configs.eval.by_dose = d
                 configs.eval.normalize_by_all = True
                 run_classifier(configs, data_reps = data_reps)
-                configs.eval.normalize_by_all = False
-                run_classifier(configs, data_reps = data_reps)
+                # configs.eval.normalize_by_all = False
+                # run_classifier(configs, data_reps = data_reps)
+
+        return rc
             
 
 if __name__ == "__main__":
 
 
-    # if len(sys.argv) <2:
-
-        # exp_name = 'base_fs'
-        # configs = set_configs()
-    # else:
-    # configs = set_configs()
-    
     if len(sys.argv) < 2:
         
         # configs.general.exp_name = 'base'
-        exp_name = '1701_try'
-
-        configs = set_configs(exp_name)
+        # exp_name = 'a_16044'
+        # exp_name = 'test9_1704'
+        exp_name = '2705'
+        configs = set_configs(exp_name) 
 
         # CP Profile Type options: 'augmented' , 'normalized', 'normalized_variable_selected'
-        
         configs.general.debug_mode = False
-        configs.general.run_all_datasets = True
+        configs.general.run_all_datasets = False
         configs.data.run_data_process = False
         configs.model.tune_hyperparams = False
+        configs.model.n_tuning_trials = 10
         configs.data.feature_select = True
-        configs.general.tune_ldims = False
         configs.model.deep_decoder = False
-        # configs.data.overwrite_data_creation = True
+        configs.general.overwrite_experiment = False
         # dataset : CDRP, CDRP-bio, LINCS, LUAD, TAORF
         configs.general.flow = 'run_ad'
         # configs.general.flow = 'calc_metrics'
-        configs.general.dataset = 'LINCS'
+        # configs.general.dataset = 'LINCS'
         configs.general.dataset = 'CDRP-bio'
         configs.data.corr_threshold = 0.9
+        configs.data.plate_normalized = True
+        configs.eval.run_dose_if_exists = True
         # configs.general.dataset = 'LUAD'
-        # configs.general.dataset = 'TAORF'
+        configs.general.dataset = 'TAORF'
 
         configs.data.modality = 'CellPainting'
         # configs.data.modality = 'L1000'
         
         # configs.data.norm_method = 'mad_robustize'
         configs.data.profile_type = 'normalized_variable_selected'
+        configs.data.profile_type = 'normalized'
         configs.data.profile_type = 'augmented'
         configs.moa.moa_dirname = 'MoAprediction_single'
+        configs.eval.calc_l1k = True
+        configs.eval.rand_reps = 1
+        configs.general.run_all_datasets = False
 
     else:
         configs = set_configs()
+        exp_name = configs.general.exp_name
 
-    if configs.general.run_all_datasets:
-        datasets = ['CDRP-bio', 'LUAD', 'TAORF','LINCS']
+    if configs.general.run_parallel:
+        datasets = ['CDRP-bio','LUAD','TAORF','LINCS']
+        datasets = [datasets[configs.general.slice_id]]
+    elif configs.general.run_all_datasets:
+        datasets = ['TAORF','LUAD','CDRP-bio','LINCS']
     else:
         datasets = [configs.general.dataset]
+
+    if configs.data.plate_normalized:
+        # data_reps = ['ae_diff','baseline', 'PCA',  'ZCA']
+        # data_reps = ['ae_diff','baseline','baseline_dmso']
+        # data_reps = ['ae_diff','baseline', 'baseline_unchanged']
+        data_reps = ['ae_diff','baseline']
+    else:
+        # data_reps = ['ae_diff','baseline', 'PCA',  'ZCA', 'PCA-cor','ZCA-cor']
+        # data_reps = ['ae_diff','baseline', 'baseline_unchanged']
+        data_reps = ['ae_diff','baseline']
+    
+
+    configs.data.data_reps = data_reps
+    print(f'Running datasets: {datasets}')
 
     for d in datasets:
         configs.general.dataset = d
         configs = set_paths(configs)
+        config_path = os.path.join(configs.general.output_exp_dir,'args.pkl')
+        if os.path.exists(config_path):
+            print('Experiment already exists! Loading configs from file')
+            configs = get_configs(configs.general.output_exp_dir)
+            configs.general.from_file = True
 
+        for param in HYPER_PARAMS[d].keys():
+            # check if attribute not is sys.args 
+            if param not in sys.argv[1:]:
+                setattr(configs.model, param, HYPER_PARAMS[d][param])
+                configs.general.logger.info(f'Overriding {param} with {HYPER_PARAMS[d][param]} from default hyperparams')
+            else:
+                configs.general.logger.info(f'{param} set to {getattr(configs.model, param)} from argument')
+
+        if configs.data.profile_type == 'normalized_variable_selected':
+            configs.model.latent_dim = 16
+            configs.model.encoder_type = 'default'
+        
+
+            
+        # configs.model.latent_dim = HYPER_PARAMS[d]['latent_dim']
+        # configs.model.encoder_type = HYPER_PARAMS[d]['encoder_type']
+        # configs.model.deep_decoder = HYPER_PARAMS[d]['deep_decoder']
+        # configs.model.batch_size = HYPER_PARAMS[d]['batch_size']
         if configs.data.modality == 'CellPainting':
             configs.data.modality_str = 'cp'
         elif configs.data.modality == 'L1000':
@@ -199,5 +230,7 @@ if __name__ == "__main__":
         if configs.general.debug_mode:
             # configs.general.exp_name += '_debug'
             configs.model.n_tuning_trials = 10
+
+        save_configs(configs)
 
         main(configs)
