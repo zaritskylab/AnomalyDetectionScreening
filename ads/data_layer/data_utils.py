@@ -1,8 +1,6 @@
 import os
 import numpy as np
-import scipy.spatial
 import pandas as pd
-import sklearn.decomposition
 from sklearn import preprocessing
 from sklearn.metrics import pairwise_distances
 from pycytominer.cyto_utils import output

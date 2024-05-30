@@ -18,4 +18,3 @@ notebooks/shap_analysis.ipynb
 **/__pycache__/
 .vscode/
 **/.ipynb_checkpoints/
-**.png

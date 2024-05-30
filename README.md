@@ -9,12 +9,12 @@ High-content image-based phenotypic profiling combines automated microscopy and 
 
 ## Downloading data
 
-We downloaded all metadata-augmented per-well aggregated Cell Painting datasets from the [Cell Painting Gallery (CPG)] (https://registry.opendata.aws/cellpainting-gallery/).
+All augmented per-well aggregated Cell Painting datasets were downloaded from the Cell Painting Gallery (CPG) (https://registry.opendata.aws/cellpainting-gallery/).
 
 ## Project setup and run:
 
 1. Clone this repository.
-2. Open cmd/shell/terminal and go to project folder: `cd SLGC-tissue-similarity-and-grading`
+2. Open cmd/shell/terminal and go to project folder: `cd AnomalyDetectionScreening`
 3. Create a conda environment: `conda create -n pytorch_anomaly python=3.10.9`
 4. Activate the conda environment `conda activate pytorch_anomaly`
 5. Install the required packages: `pip install -r requirements.txt`
@@ -44,8 +44,6 @@ We downloaded all metadata-augmented per-well aggregated Cell Painting datasets 
 [comment]: <> (* Direct download: [16-bit]&#40;https://theswissbay.ch/pdf/_notpdf_/gpt4chan_model_float16/&#41; / [32-bit]&#40;https://theswissbay.ch/pdf/_notpdf_/gpt4chan_model/&#41;)
 
 [comment]: <> (The 32-bit version is only relevant if you intend to run the model in CPU mode. Otherwise, you should use the 16-bit version.)
-
-## Run anomaly detection
 
 ## Citation
 
