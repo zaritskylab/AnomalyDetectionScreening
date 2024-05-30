@@ -28,7 +28,7 @@ from interpret_layer.shap_anomalies import ExplainAnomaliesUsingSHAP,run_anomaly
 from utils.readProfiles import *
 from utils.global_variables import ABRVS, DS_INFO_DICT
 from utils.general import write_dataframe_to_excel, add_exp_suffix
-from data_layer.data_utils import load_data, pre_process,to_dataloaders
+from data_layer.data_utils import load_data, pre_process,construct_dataloaders
 from old.Classifier import *
 from scripts.classify_moa import get_moa_dirname, remove_classes_with_few_moa_samples, remove_multi_label_moa
 from scripts.create_null_distribution import main as create_null_distributions
@@ -114,7 +114,7 @@ if run_parrallel:
 ###### load data #######
 data , __ = load_data(configs.general.base_dir,configs.general.dataset,configs.data.profile_type, modality=configs.data.modality)
 data_preprocess,features =  pre_process(data,configs,data_reps=['ae_diff','baseline'])
-dataloaders = to_dataloaders(data_preprocess,configs.model.batch_size,features)
+dataloaders = construct_dataloaders(data_preprocess,configs.model.batch_size,features)
 test_dataloaders = list(dataloaders.keys())[2:]
 
 

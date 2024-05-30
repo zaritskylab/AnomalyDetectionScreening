@@ -1,13 +1,13 @@
 import random
-from collections import defaultdict
+# from collections import defaultdict
 from statistics import median
 import numpy as np
 import sys
 import os
 from sklearn import preprocessing
 from sklearn.metrics import f1_score
-from sklearn.utils import class_weight
-from sklearn.naive_bayes import GaussianNB,ComplementNB
+# from sklearn.utils import class_weight
+# from sklearn.naive_bayes import GaussianNB,ComplementNB
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import cross_val_score, cross_val_predict, GroupKFold,StratifiedGroupKFold,GridSearchCV,KFold
 from sklearn.neural_network import MLPClassifier
@@ -16,12 +16,12 @@ from imblearn.over_sampling import RandomOverSampler
 import pandas as pd
 from tqdm import tqdm
 import xgboost as xgb
-from sklearn.metrics import adjusted_rand_score, adjusted_mutual_info_score
-from sklearn.model_selection import LeaveOneOut,cross_val_score
+# from sklearn.metrics import adjusted_rand_score, adjusted_mutual_info_score
+# from sklearn.model_selection import LeaveOneOut,cross_val_score
 from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import pairwise_distances,mean_absolute_error, mean_squared_error
-import shap
+# from sklearn.ensemble import RandomForestClassifier
+# from sklearn.metrics import pairwise_distances,mean_absolute_error, mean_squared_error
+# import shap
 import matplotlib.pyplot as plt
 import pickle
 
@@ -34,13 +34,16 @@ sys.path.insert(0, currentdir)
 
 from utils.general import revise_exp_name, set_configs, set_paths,set_seed, add_exp_suffix
 from utils.global_variables import DS_INFO_DICT, ABRVS
-from data_layer.data_utils import set_index_fields
+
 # from utils.eval_utils import filter_data_by_highest_dose
-from utils.readProfiles import get_cp_path, get_cp_dir, read_paired_treatment_level_profiles, read_treatment_level_profiles, filter_data_by_highest_dose
-from utils.reproduce_funcs import get_median_correlation, get_duplicate_replicates, get_replicates_score
+from data_layer.data_utils import get_cp_path, get_cp_dir, read_paired_treatment_level_profiles, read_treatment_level_profiles, filter_data_by_highest_dose
+# from utils.reproduce_funcs import get_median_correlation, get_duplicate_replicates, get_replicates_score
 from utils.general import write_dataframe_to_excel
 from utils.file_utils import load_df_pickles_and_concatenate
 
+
+
+# adapted from https://github.com/carpenter-singh-lab/2022_Haghighi_NatureMethods/tree/main/App2.MoA_prediction 
 
 ############################################################################################################
 
@@ -146,6 +149,7 @@ def get_filter_rep_params(dataset, exp_suffix,repCorrFilePath, filter_groups,fil
     return filter_repCorr_params
 
 ############################################################################################################
+
 
 def run_classifier(configs, data_reps = None):
 
@@ -407,8 +411,8 @@ def run_single_validation_for_all_models(methods, configs,sampler,moa_pred_res,p
 
     if configs.moa.tune:
         parameter_space_MLP = {
-            # 'hidden_layer_sizes': [(256,),(128,),(64), (128,64),(256,64), (128,32), (64,16),(128,64,32),(256,128,64)],
-            'hidden_layer_sizes': [(256,64), (128,32), (64,16)],
+            'hidden_layer_sizes': [(256,),(128,),(64), (128,64),(256,64), (128,32), (64,16)],
+            # 'hidden_layer_sizes': [(256,64), (128,32), (64,16)],
             'activation': ['tanh', 'relu'],
             'alpha': [0.0001,0.001,0.01,0.05],
             'learning_rate': ['constant','adaptive'],
@@ -437,8 +441,8 @@ def run_single_validation_for_all_models(methods, configs,sampler,moa_pred_res,p
         if cls_model=='lr':            
             if configs.moa.tune:
                 if (configs.moa.tune_first_fold and cv_num==1) or not configs.moa.tune_first_fold:
-                    model_logistic = LogisticRegression(random_state=configs.moa.exp_seed,multi_class='multinomial',class_weight="balanced",n_jobs=4, max_iter=500) 
-                    model_tr = GridSearchCV(model_logistic, parameter_space_logistic, n_jobs=4, cv=3)
+                    model_logistic = LogisticRegression(random_state=configs.moa.exp_seed,multi_class='multinomial',class_weight="balanced",n_jobs=8, max_iter=500) 
+                    model_tr = GridSearchCV(model_logistic, parameter_space_logistic, n_jobs=8, cv=4)
                 # else:
             elif not configs.moa.tune:
                 model_tr = LogisticRegression(multi_class='multinomial',class_weight="balanced", max_iter=1000, random_state=configs.moa.exp_seed) 
@@ -447,8 +451,8 @@ def run_single_validation_for_all_models(methods, configs,sampler,moa_pred_res,p
 #             model_MLP = MLPClassifier(random_state=5,max_iter=100,alpha=0.0001,activation='tanh')
             if configs.moa.tune:
                 if (configs.moa.tune_first_fold and cv_num==1) or not configs.moa.tune_first_fold:
-                    model_MLP = MLPClassifier(random_state=configs.moa.exp_seed,max_iter=500)
-                    model_tr = GridSearchCV(model_MLP, parameter_space_MLP, n_jobs=4, cv=3)
+                    model_MLP = MLPClassifier(random_state=configs.moa.exp_seed,max_iter=800)
+                    model_tr = GridSearchCV(model_MLP, parameter_space_MLP, n_jobs=8, cv=4)
             elif not configs.moa.tune:
                 # model_tr = MLPClassifier(random_state=5,max_iter=200,alpha=0.0001,activation='tanh')
                 model_tr = MLPClassifier(random_state=configs.moa.exp_seed,max_iter=1000,alpha=0.0001,activation='relu',hidden_layer_sizes=(200,),learning_rate='constant')

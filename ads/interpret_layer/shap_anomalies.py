@@ -12,11 +12,12 @@ import seaborn as sns
 import matplotlib.style as style
 # from scripts.run_ad import test_autoencoder
 from scripts.classify_moa import get_moa_dirname, remove_classes_with_few_moa_samples, remove_multi_label_moa
-from scripts.create_null_distribution import main as create_null_distributions
+from scripts.calc_reproducibility import calc_percent_replicating
 from utils.general import add_exp_suffix
 from utils.global_variables import DS_INFO_DICT, TOP_MOAS_DICT, NEW_MOAS_DICT
-from scripts.run_ad import train_autoencoder, load_checkpoint
-from data_layer.data_utils import load_data, pre_process, to_dataloaders
+from anomaly_pipeline import train_autoencoder, load_checkpoint
+from data_layer.data_preprocess import pre_process, construct_dataloaders
+from data_layer.data_utils import load_data
 import logging
 
 logging.getLogger('shap').setLevel(logging.WARNING) # turns off the "shap INFO" logs
@@ -25,7 +26,7 @@ def run_anomaly_shap(configs, model=None, filter_non_reproducible=True):
 
     data , __ = load_data(configs.general.base_dir,configs.general.dataset,configs.data.profile_type, modality=configs.data.modality)
     data_preprocess,features =  pre_process(data,configs)
-    dataloaders = to_dataloaders(data_preprocess,configs.model.batch_size,features)
+    dataloaders = construct_dataloaders(data_preprocess,configs.model.batch_size,features)
 
     if model is None:
         model = load_checkpoint(configs.model.ckpt_dir)
@@ -56,7 +57,7 @@ def run_anomaly_shap(configs, model=None, filter_non_reproducible=True):
     if filter_non_reproducible:
 
         if not os.path.exists(corr_path):
-            create_null_distributions(configs,data_reps=['ae_diff','baseline'])
+            calc_percent_replicating(configs,data_reps=['ae_diff','baseline'])
             # sys.exit()
         repcorr_df = pd.read_csv(corr_path)
 

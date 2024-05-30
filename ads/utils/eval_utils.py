@@ -21,7 +21,7 @@ from scipy.stats import pearsonr
 # sns.set_style("whitegrid")
 sns.set(rc={"lines.linewidth": 2})
 
-# from https://github.com/carpenter-singh-lab/2022_Haghighi_NatureMethods/blob/main/utils/replicateCorrs.py
+# adapted from https://github.com/carpenter-singh-lab/2022_Haghighi_NatureMethods/blob/main/utils/replicateCorrs.py
 
 def replicateCorrs(inDf,pertColName,featColNames,plotEnabled,reps=5):
     
@@ -67,35 +67,6 @@ def replicateCorrs(inDf,pertColName,featColNames,plotEnabled,reps=5):
 #         repCorr=np.sort(np.unique(df1.loc[:,featColNames].T.corr().values))[:-1].tolist()
 #         repC=repC+repCorr
         repC=repC+[np.nanmedian(repCorr)]
-#         repC=repC+[np.median(repCorr)]
-# #         randPertbs=df2[pertColName].drop_duplicates().sample(df1.shape[0],replace=True).tolist()
-#         nS=np.min([len(df2[pertColName].unique().tolist()),df1.shape[0]])
-# #         nS=df1.shape[0]
-
-# #         print(nS,[len(df2[pertColName].unique().tolist()),df1.shape[0]])
-        
-#         randPertbs=sample(df2[pertColName].unique().tolist(),k=nS)
-# #         print(randPertbs)
-#         df3=pd.concat([df2[df2[pertColName]==i].sample(1,replace=True) for i in randPertbs],ignore_index=True)
-# #         print(df1.sample(df3.shape[0],replace=False).shape,df3.shape)
-#         randCorr=df1[featColNames].sample(df3.shape[0],replace=False).reset_index(drop=True).\
-#     corrwith(df3[featColNames], axis = 1,method='pearson',drop=True).values.tolist()
-
-# #         x1=df1.sample(df3.shape[0],replace=False).values
-    
-# #         randCorr=pearsonr()
-# #         randCorr = [x for x in randCorr if str(x) != 'nan']
-#         randC=randC+randCorr
-# #     print(randC)    
-#     print('here3')
-
-    # randC_v2=[]    
-    # for i in range(1):
-    #     uniqeSamplesFromEachPurt=inDf.groupby(pertColName)[featColNames].apply(lambda s: s.sample(1))
-    #     corrMatAcrossPurtbs=uniqeSamplesFromEachPurt.loc[:,featColNames].T.corr()
-    #     randCorrVals=list(corrMatAcrossPurtbs.values[np.triu_indices(corrMatAcrossPurtbs.shape[0], k = 1)])
-    # randC_v2=randC_v2+randCorrVals
-    # randC_v2 = [randC_v2 for randC_v2 in randC_v2 if str(randC_v2) != 'nan']    
 
     randC_v2=calc_rand_corr(inDf,pertColName,featColNames,reps=reps)
 

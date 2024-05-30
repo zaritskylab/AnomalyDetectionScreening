@@ -15,30 +15,28 @@ import seaborn as sns
 from matplotlib_venn import venn2, venn2_circles, venn3, venn3_circles
 currentdir = '/sise/home/alonshp/AnomalyDetectionScreening'
 
-# currentdir = os.path.dirname('home/alonshp/AnomalyDetectionScreeningLocal/')
-# print(currentdir)
-sys.path.insert(0, os.getcwd())
-sys.path.insert(0, currentdir)
+# sys.path.insert(0, os.getcwd())
+# sys.path.insert(0, currentdir)
 
 from utils.general import revise_exp_name, set_configs, set_paths, add_exp_suffix, write_dataframe_to_excel
 from utils.global_variables import DS_INFO_DICT, METHOD_NAME_MAPPING
-from data_layer.data_utils import set_index_fields, load_data, load_zscores
-from utils.readProfiles import get_cp_path, get_cp_dir, filter_data_by_highest_dose
-from utils.reproduce_funcs import get_duplicate_replicates, get_null_distribution_replicates,get_replicates_score
+from data_layer.data_utils import load_zscores
+from data_layer.data_utils import get_cp_path, get_cp_dir, filter_data_by_highest_dose
+# from utils.reproduce_funcs import get_duplicate_replicates, get_null_distribution_replicates,get_replicates_score
 from utils.eval_utils import get_color_from_palette
 # from utils.metrics import extract_ss_score, extract_new_score_for_compound, extract_ss_score_for_compound
 from utils.eval_utils import replicateCorrs, calc_rand_corr
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
+# adapted from https://github.com/carpenter-singh-lab/2022_Haghighi_NatureMethods/blob/main/utils/replicateCorrs.py 
 
 
-def main(configs,data_reps = ['ae_diff','baseline']):
+def calc_percent_replicating(configs,data_reps = ['ae_diff','baseline']):
     
     base_dir= '/sise/assafzar-group/assafzar/genesAndMorph'
     # data_dir = get_cp_dir(configs)
     data_dir =  get_cp_dir(base_dir,configs.general.dataset,configs.data.profile_type)
     l1k_data_dir = get_cp_dir(base_dir,configs.general.dataset,configs.data.profile_type,modality='L1000')
-    num_rand = 1000
     run_dist_plots = False
     # exp_name= 'ae_12_09_fs'
     
@@ -59,11 +57,6 @@ def main(configs,data_reps = ['ae_diff','baseline']):
     profile_types = [p for p in ['augmented','normalized_variable_selected'] if any(p in string for string in os.listdir(output_dir))]
     data_reps = [dr for dr in data_reps if any(dr in string for string in os.listdir(output_dir))]
 
-    if configs.eval.by_dose:
-        null_dist_path = f'{null_base_dir}/null_distribution_replicates_{num_rand}_d.pkl'
-    else:
-        null_dist_path = f'{null_base_dir}/null_distribution_replicates_{num_rand}.pkl'
-
     for p in profile_types:
 
         exp_suffix = add_exp_suffix(p,configs.eval.by_dose, configs.eval.normalize_by_all,configs.eval.z_trim,configs.eval.min_max_norm)
@@ -74,14 +67,7 @@ def main(configs,data_reps = ['ae_diff','baseline']):
         methods = {}
         for dr in data_reps:
             methods[dr] = {'name':dr,'path':os.path.join(output_dir,f'replicate_level_{modality_str}_{p}_{dr}.csv')}
-        # methods = {
-        #     # 'anomaly':{'name':'anomaly','path':os.path.join(output_dir,f'replicate_level_{modality_str}_{p}_ae.csv')},
-        #     'anomalyCP':{'name':'Anomaly','path':os.path.join(output_dir,f'replicate_level_{modality_str}_{p}_ae_diff.csv')},
-        #     # 'anomaly_emb':{'name':'anomaly_emb','path':os.path.join(output_dir,f'replicate_level_{modality_str}_{p}_ae_embeddings.csv')},
-        #     'CP':{'name':'CellProfiler','path': os.path.join(output_dir,f'replicate_level_{modality_str}_{p}_baseline.csv')},
-        #     # 'l1k':{'name':'L1000','path': os.path.join(l1k_data_dir,f'replicate_level_l1k_{p}.csv.gz')}
-        #     # 'raw_unchanged':{'name':'raw_unchanged','path': os.path.join(data_dir,f'replicate_level_cp_{p}.csv.gz')}
-        # }
+        
         if configs.eval.calc_l1k:
             methods['l1k'] = {'name':'L1000','path': os.path.join(l1k_data_dir,f'replicate_level_l1k_{p}.csv.gz')}
 
@@ -106,7 +92,6 @@ def main(configs,data_reps = ['ae_diff','baseline']):
             cpd_col = 'cpd_col'
 
         ################ run rep correlation measurements ####################
-    # for p in profile_types:
         corr_path = f'{exp_save_dir}/RepCorrDF.xlsx'
 
         methods = calc_replicate_corrs(methods,configs.general.dataset,cpd_col,exp_suffix,corr_path,debug,rand_reps=configs.eval.rand_reps,overwrite_experiment=configs.general.overwrite_experiment)
@@ -120,11 +105,7 @@ def main(configs,data_reps = ['ae_diff','baseline']):
 
         run_pr_plot(methods,methods_for_plot,fig_dir)
         
-        # check if 'cor' is in any of the data reps list
-        is_cor = 'ZCA-cor' in data_reps or 'PCA-cor' in data_reps
-        if is_cor:
-            methods_for_plot_no_cor = [m for m in methods_for_plot if 'cor' not in m]
-            run_pr_plot(methods,methods_for_plot_no_cor,fig_dir)
+
         ############
         # find best method 
         comp_methods = data_reps[1:]
@@ -151,12 +132,6 @@ def main(configs,data_reps = ['ae_diff','baseline']):
             plt.tight_layout()
             plt.savefig(venn_path)
         plt.close()
-
-
-        ####################### compute "Signature Strength" param for both methods #########################
-        # for m in methods_for_plot:
-        #     methods[m]['ss'] = extract_ss_score(methods[m]['zscores'],cpd_id_fld = DS_INFO_DICT[configs.general.dataset][methods[m]['modality']][cpd_col], th_range=[2], abs_zscore=False, new_ss = False,cpd_id_fld = methods[m]['ind_col']) / len(methods[m]['features'])
-
 
         ####################### compute L1000 replicate correlation for both methods #########################
         if 'l1k' in methods.keys():
@@ -215,23 +190,6 @@ def main(configs,data_reps = ['ae_diff','baseline']):
                 
         configs.general.logger.info('completed running RC successfully!')
 
-        ####################### creating null distribution replicates #########################
-        if not os.path.exists(null_dist_path):
-
-            replicates_df, cpds = get_duplicate_replicates(methods['CP']['zscores'],min_num_reps=4)
-            null_distribution_replicates = get_null_distribution_replicates(replicates_df, cpds, rand_num=num_rand)
-            
-            # null_distribution_replicates.to_csv(f'null_distribution_replicates_{num_plates}.csv')
-            with open(null_dist_path, 'wb') as handle:
-                pickle.dump(null_distribution_replicates, handle, protocol=pickle.HIGHEST_PROTOCOL)
-
-        else:
-            
-            with open(null_dist_path, 'rb') as f:
-                null_distribution_replicates = pickle.load(f)
-                
-        len(null_distribution_replicates)
-        
         results = {}
         for m in methods.keys():
             results[m] = methods[m]['percent_replicating']
@@ -286,8 +244,10 @@ def calc_replicate_corrs(methods, dataset,cpd_col = 'cpd_col',exp_suffix = '',co
         methods[m]['rand90'] = perc90
 
     return methods
-    
+
+
 ################################################
+
 def run_pr_plot(methods,data_reps,fig_dir,savename=None):
 
     sns.set_context("paper",font_scale = 1.8, rc={"font.size":8,"axes.titlesize":16,"axes.labelsize":16,"axes.facecolor": "white","axes.style": "ticks"})
@@ -330,14 +290,7 @@ def run_pr_plot(methods,data_reps,fig_dir,savename=None):
         text_y_loc = y_lim*0.65
         for i, m in enumerate(data_reps):
             axes[i].text(0.08+methods[m]['rand90'], text_y_loc,str(int(np.round(methods[m]['percent_replicating'],2)))+ '%>t',fontsize=14) #add text
-        # if configs.general.dataset == 'TAORF':
-            # axes[0].legend(bbox_transform = fig.transFigure, loc=3, 
-            # axes[0].legend(loc='lower right', bbox_to_anchor=(0.5, -0.4), ncol=4)
-            # bbox_to_anchor=(0.05, -0.05, 2.2, .102)
-            # bbox_to_anchor=(0,0))
-            # ncol=4, mode="expand", borderaxespad=0)
-        # lines_labels = [ax.get_legend_handles_labels() for ax in fig.axes]
-        # lines, labels = [sum(lol, []) for lol in zip(*lines_labels)]
+
     else:
         m='l1k'
         ncols =1 
@@ -392,7 +345,6 @@ if __name__ == '__main__':
         configs.general.dataset = 'CDRP-bio'
         # configs.general.dataset = 'TAORF'
 
-        configs.data.profile_type = 'normalized_variable_selected'
         configs.data.profile_type = 'augmented'
         configs.data.modality = 'CellPainting'
         configs.eval.by_dose = False
@@ -405,7 +357,7 @@ if __name__ == '__main__':
         configs.general.overwrite_experiment = False
         data_reps = ['ae_diff','baseline']
     configs = set_paths(configs)
-    main(configs,data_reps)
+    calc_percent_replicating(configs,data_reps)
 
     # DT_kfold={'LUAD':10, 'TAORF':5, 'LINCS':25, 'CDRP-bio':6,'CDRP':40}
 

@@ -11,7 +11,7 @@ import logging
 import pickle
 import pandas as pd 
 from collections import defaultdict
-from data_layer.data_utils import load_data, pre_process, to_dataloaders
+# from data_layer.data_utils import load_data, pre_process, construct_dataloaders
 from utils.general import save_configs,get_configs
 from interpret_layer.shap_anomalies import run_anomaly_shap
 import matplotlib.pyplot as plt
@@ -28,13 +28,13 @@ sns.set_theme(style='ticks',context='paper', font_scale=1.5)
 # sys.path.insert(0, currentdir)
 # sys.path.insert(0, code_dir)
 
-from scripts.run_ad import main as run_ad
+from anomaly_pipeline import anomaly_pipeline as run_ad
 # from utils.configuration import DataArguments, GeneralArguments, ModelArguments, EvalArguments
 from utils.general import set_seed, set_logger, output_path, set_paths, assert_configs, set_configs, revise_exp_name
 # from scripts.calc_repreducibility import main as calc_reproducibility
 # from scripts.classify_moa import main as run_moa
 from utils.global_variables import ABRVS,DS_INFO_DICT, HYPER_PARAMS
-from scripts.create_null_distribution import main as create_null_distributions
+from scripts.calc_reproducibility import calc_percent_replicating as calc_percent_replicating
 from scripts.classify_moa import run_classifier
 
 pd.set_option('display.max_rows', 100)
@@ -99,7 +99,7 @@ def eval_results(configs,data_reps = None):
                 configs.eval.z_trim = None
                 configs.eval.normalize_by_all = True
                 configs.general.logger.info(f'Running null distributions for dose {d} and normalize_by_all = True')
-                rc = create_null_distributions(configs,data_reps=data_reps)
+                rc = calc_percent_replicating(configs,data_reps=data_reps)
                 # configs.eval.normalize_by_all = False
                 # configs.general.logger.info(f'Running null distributions for dose {d} and normalize_by_all = False')
                 # _ =  create_null_distributions(configs,data_reps=data_reps)
@@ -127,10 +127,8 @@ if __name__ == "__main__":
 
     if len(sys.argv) < 2:
         
-        # configs.general.exp_name = 'base'
-        # exp_name = 'a_16044'
         # exp_name = 'test9_1704'
-        exp_name = '2705'
+        exp_name = 'try295'
         configs = set_configs(exp_name) 
 
         # CP Profile Type options: 'augmented' , 'normalized', 'normalized_variable_selected'

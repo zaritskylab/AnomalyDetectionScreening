@@ -1,64 +1,25 @@
-# Anomaly Detection for Screening (ADS)
+# Anomaly detection for high-content image-based phenotypic cell profiling
 
-An anomaly detection framework for High Throughput Screening (HTS)
+High-content image-based phenotypic profiling combines automated microscopy and analysis to identify phenotypic alterations in cell morphology and provide insight into the cell's physiological state. Classical representations of the phenotypic profile can not capture the full underlying complexity in cell organization, while recent weakly machine-learning based representation-learning methods are hard to biologically interpret. We used the abundance of control wells to learn the in-distribution of control experiments and use it to formulate a self-supervised reconstruction anomaly-based representation that encodes the intricate morphological inter-feature dependencies while preserving the representation interpretability. The performance of our anomaly-based representations was evaluated for downstream tasks with respect to two classical representations across four public Cell Painting datasets. Anomaly-based representations improved reproducibility, Mechanism of Action classification, and complemented classical representations. Unsupervised explainability of autoencoder-based anomalies identified specific inter-feature dependencies causing anomalies. The general concept of anomaly-based representations can be adapted to other applications in cell biology.
 
-## Installation
-
-### Manual installation using Conda
-
-#### 0. Install Conda
-
-https://docs.conda.io/en/latest/miniconda.html
-
-On Linux or WSL, it can be automatically installed with these two commands:
-
-```
-curl -sL "https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh" > "Miniconda3.sh"
-bash Miniconda3.sh
-```
-Source: https://educe-ubc.github.io/conda.html
-
-#### 1. Create a new conda environment
-
-```
-conda create -n pytorch_ads python=3.10.9
-conda activate pytorch_ads
-```
-
-#### 2. Install Pytorch
-
-| System | GPU | Command |
-|--------|---------|---------|
-| Linux/WSL | NVIDIA | `pip3 install torch torchvision` |
-| Linux | AMD | `pip3 install torch torchvision --index-url https://download.pytorch.org/whl/rocm5.4.2` |
-| MacOS + MPS (untested) | Any | `pip3 install torch torchvision` |
-
-The up-to-date commands can be found here: https://pytorch.org/get-started/locally/. 
+<p align="center">
+<img src="figures/fig1.png" width=40%>
+</p>
 
 
-#### 3. Set up the enviroment
-
-```
-git clone https://github.com/alonshpigler/AnomalyDetectionScreening
-cd AnomalyDetectionScreening
-pip install -r requirements.txt
-```
-
-#### 3.1 Updating the requirements
-
-From time to time, the `requirements.txt` changes. To update, use this command:
-
-```
-conda activate pytorch_ads
-cd AnomalyDetectionScreening
-pip install -r requirements.txt --upgrade
-```
 ## Downloading data
 
+We downloaded all metadata-augmented per-well aggregated Cell Painting datasets from the [Cell Painting Gallery (CPG)] (https://registry.opendata.aws/cellpainting-gallery/).
 
-Data should be placed inside the `data/` folder. Referencing to a different data folder can be stated through `--data_dir` field.
+## Project setup and run:
 
-References for screen data used in this work can be downloaded from [This repository](https://github.com/carpenter-singh-lab/2022_Haghighi_NatureMethods).
+1. Clone this repository.
+2. Open cmd/shell/terminal and go to project folder: `cd SLGC-tissue-similarity-and-grading`
+3. Create a conda environment: `conda create -n pytorch_anomaly python=3.10.9`
+4. Activate the conda environment `conda activate pytorch_anomaly`
+5. Install the required packages: `pip install -r requirements.txt`
+5. Run `python ads/main.py`. This script will run the anomaly detection pipeline and subsequent analyses: train the anomaly detection model, calculate percent replicating, train mechanism of action (MoA) and generate SHAP-based anomaly explanations.
+6. Run additional notebooks under 'notebooks/' to generate figures and tables.
 
 [comment]: <> (You can automatically download a model from HF using the script `download-model.py`:)
 
@@ -86,36 +47,15 @@ References for screen data used in this work can be downloaded from [This reposi
 
 ## Run anomaly detection
 
-After downloading the data, run `ads/run_ad.py` to detect anomalies in the data.
+## Citation
 
-1. Place the files under `models/gpt4chan_model_float16` or `models/gpt4chan_model`.
-2. Place GPT-J 6B's config.json file in that same folder: [config.json](https://huggingface.co/EleutherAI/gpt-j-6B/raw/main/config.json).
-3. Download GPT-J 6B's tokenizer files (they will be automatically detected when you attempt to load GPT-4chan):
-
-```
-python download-model.py EleutherAI/gpt-j-6B --text-only
-```
-
-## Tensorboard visualization
+For a complete discussion of our findings please view our preprint:
 
 TBD.
 
-[comment]: <> (    conda activate textgen)
-
-[comment]: <> (    cd text-generation-webui)
-
-[comment]: <> (    python server.py)
-
-[comment]: <> (Then browse to )
-
-[comment]: <> (`http://localhost:7860/?__theme=dark`)
-
-[comment]: <> (Optionally, you can use the following command-line flags:)
-
-## Basic settings
-
-TBD.
-
+<!-- > Machine learning inference of continuous single-cell state transitions during myoblast differentiation and fusion
+Amit Shakarchy, Giulia Zarfati, Adi Hazak, Reut Mealem, Karina Huk, Ori Avinoam, Assaf Zaritsky
+bioRxiv 2023.02.19.529100; doi: https://doi.org/10.1101/2023.02.19.529100 -->
 [comment]: <> (| Flag                                       | Description |)
 
 [comment]: <> (|--------------------------------------------|-------------|)

@@ -7,18 +7,14 @@ from torch import nn
 from torch.utils.data import DataLoader
 from pytorch_lightning import seed_everything
 from pytorch_lightning.callbacks import EarlyStopping, TQDMProgressBar
-from pytorch_lightning.loggers import CSVLogger
-
-import sys
 import os
 # sys.path.insert(0, os.path.join(os.getcwd(),'AnomalyDetectionScreening'))
 # sys.path.insert(0, os.path.join(os.getcwd(),'AnomalyDetectionScreening','ads'))
 
 # from interpret_layer.shap_anomalies import run_anomaly_shap
 from model_layer.AEModel import AutoencoderModel
-
-from data_layer.data_utils import load_data, pre_process, to_dataloaders,normalize,get_features
-from utils.readProfiles import save_profiles
+from data_layer.data_preprocess import pre_process, construct_dataloaders,normalize
+from data_layer.data_utils import save_profiles, load_data
 import os
 from typing import Dict, Union
 import torch
@@ -28,35 +24,27 @@ from pytorch_lightning.loggers import TensorBoardLogger
 import optuna
 
 
-def main(configs):
+def anomaly_pipeline(configs):
+
+    '''
+    Main function to train and test the autoencoder model
+    '''
+
     data , __ = load_data(configs.general.base_dir,configs.general.dataset,configs.data.profile_type, modality=configs.data.modality)
     data_preprocess,features =  pre_process(data,configs,configs.data.data_reps)
-    dataloaders = to_dataloaders(data_preprocess,configs.model.batch_size,features)
+    dataloaders = construct_dataloaders(data_preprocess,configs.model.batch_size,features)
     model = train_autoencoder(dataloaders, features, configs)
 
-    test_dataloaders = list(dataloaders.keys())[2:]
     preds = test_autoencoder(model, dataloaders)
     # preds = test_autoencoder(model, dataloaders, features, configs)
     
     diffs_ctrl = preds['test_ctrl'] - data_preprocess[data_preprocess['Metadata_set'] == 'test_ctrl'][features].values
     diffs_treat = preds['test_treat'] -  data_preprocess[data_preprocess['Metadata_set'] == 'test_treat'][features].values 
 
-    diffs_ctrl_abs = np.abs(preds['test_ctrl'] - data_preprocess[data_preprocess['Metadata_set'] == 'test_ctrl'][features].values)
-    diffs_treat_abs = np.abs(preds['test_treat'] -  data_preprocess[data_preprocess['Metadata_set'] == 'test_treat'][features].values)
-
-    diffs_ctrl_power = np.power(preds['test_ctrl'] - data_preprocess[data_preprocess['Metadata_set'] == 'test_ctrl'][features].values,2)
-    diffs_treat_power = np.power(preds['test_treat'] -  data_preprocess[data_preprocess['Metadata_set'] == 'test_treat'][features].values,2)
-
-    
-    preds_normalized=post_process_anomaly_and_save(data_preprocess, preds['test_ctrl'],preds['test_treat'], configs.general.output_exp_dir,  f'replicate_level_{configs.data.modality_str}_{configs.data.profile_type}_preds', configs, features)
+    __ =post_process_anomaly_and_save(data_preprocess, preds['test_ctrl'],preds['test_treat'], configs.general.output_exp_dir,  f'replicate_level_{configs.data.modality_str}_{configs.data.profile_type}_preds', configs, features)
     # z_preds_normalized = save_treatments(data, z_preds['test_ctrl'],z_preds['test_treat'], configs.general.output_exp_dir,  f'replicate_level_{configs.data.modality_str}_{configs.data.profile_type}_ae_embeddings', configs, features, embeddings=True)
-    diffs_normalized= post_process_anomaly_and_save(data_preprocess, diffs_ctrl,diffs_treat, 
+    __ = post_process_anomaly_and_save(data_preprocess, diffs_ctrl,diffs_treat, 
         configs.general.output_exp_dir,  f'replicate_level_{configs.data.modality_str}_{configs.data.profile_type}_ae_diff', configs, features)
-    # diffs_normalized_abs= save_treatments(data_preprocess, diffs_ctrl_abs,diffs_treat_abs,
-        # configs.general.output_exp_dir,  f'replicate_level_{configs.data.modality_str}_{configs.data.profile_type}_ae_diff_abs', configs, features)
-
-    # diffs_normalized_power= save_treatments(data_preprocess, diffs_ctrl_power,diffs_treat_power,
-        # configs.general.output_exp_dir,  f'replicate_level_{configs.data.modality_str}_{configs.data.profile_type}_ae_diff_power', configs, features)    
             
         
 
@@ -107,20 +95,6 @@ def train_autoencoder(dataloaders, features, configs,losses = {}):
     
     trainer.fit(model, dataloaders['train'],dataloaders['val'])
 
-    # Test model
-    test_dataloaders = ['train','val','test_ctrl', 'test_treat']
-
-    # print('saved diff files')
-    # metrics = pd.read_csv(f"{trainer.logger.log_dir}/metrics.csv")
-    # del metrics["step"]
-    # metrics.set_index("epoch", inplace=True)
-    # print(metrics.dropna(axis=1, how="all").head())
-    # sns.relplot(data=metrics, kind="line")
-    # plt.ylim(0, 1)
-    # plt.show()
-    # plt.savefig(os.path.join(configs.general.output_exp_dir, f'training_loss.png'))
-    # plt.close()
-
     return model
 
 def test_autoencoder(model, dataloaders, test_dataloaders= ['test_ctrl', 'test_treat']):
@@ -132,7 +106,7 @@ def test_autoencoder(model, dataloaders, test_dataloaders= ['test_ctrl', 'test_t
     x_recon_preds = {}
     z_preds = {}
     indices = {}
-    # test_dataloaders = ['test_ctrl', 'test_treat']
+    
     for subset in test_dataloaders:
         dataloader = dataloaders[subset]
         x_recon_preds[subset] =[]
@@ -151,10 +125,6 @@ def test_autoencoder(model, dataloaders, test_dataloaders= ['test_ctrl', 'test_t
 
     for subset in test_dataloaders:
         preds[subset] = np.concatenate(x_recon_preds[subset])
-        # indices[subset] = np.concatenate(indices[subset])
-        # z_preds[subset] = np.concatenate(z_preds[subset])
-
-    # x_explain_tensor = torch.tensor(x_explain[self.features].values, dtype=torch.float32).to(self.autoencoder.device)
 
     return preds
 
@@ -327,7 +297,7 @@ def post_process_anomaly_and_save(data, preds_ctrl,preds_treat, output_dir, file
             test_out = pd.concat([test_ctrl,test_treat],axis=0)
             # test_out_normalized = test_out.copy()
             # no plate normalization after training
-            test_out_normalized = normalize(test_out,features, configs.data.modality, normalize_condition = 'test_ctrl',plate_normalized=0, norm_method = "standardize", clip_outliers=False)
+            test_out_normalized = normalize(test_out,features, configs.data.modality, normalize_condition = 'test_ctrl',plate_normalized=0, norm_method = "standardize")
     else:
         test_ctrl.loc[:,features] = preds_ctrl
         test_treat.loc[:,features] = preds_treat

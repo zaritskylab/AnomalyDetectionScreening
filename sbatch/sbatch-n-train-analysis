@@ -34,4 +34,4 @@ echo -e $CONDA_DEFAULT_ENV
 echo -e $CONDA_PREFIX
 python --version
 
-python /sise/home/alonshp/AnomalyDetectionScreening/ads/scripts/n_samples_analysis.py --slice_id $SLURM_ARRAY_TASK_ID --exp_name analysis_n_samples285 --plate_normalized False --tune_hyperparams True --encoder_type deep
+python /sise/home/alonshp/AnomalyDetectionScreening/ads/scripts/n_samples_analysis.py --slice_id $SLURM_ARRAY_TASK_ID --exp_name analysis_n_samples285_fsdmso --plate_normalized False --tune_hyperparams True --encoder_type deep
