@@ -11,11 +11,11 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import matplotlib.style as style
 # from scripts.run_ad import test_autoencoder
-from scripts.classify_moa import get_moa_dirname, remove_classes_with_few_moa_samples, remove_multi_label_moa
-from scripts.calc_reproducibility import calc_percent_replicating
-from utils.general import add_exp_suffix
+from eval_layer.classify_moa import remove_classes_with_few_moa_samples, remove_multi_label_moa
+from eval_layer.calc_reproducibility import calc_percent_replicating
+from utils.config_utils import add_exp_suffix
 from utils.global_variables import DS_INFO_DICT, TOP_MOAS_DICT, NEW_MOAS_DICT
-from anomaly_pipeline import train_autoencoder, load_checkpoint
+from pipeline.anomaly_pipeline import load_checkpoint
 from data_layer.data_preprocess import pre_process, construct_dataloaders
 from data_layer.data_utils import load_data
 import logging
@@ -30,9 +30,10 @@ def run_anomaly_shap(configs, model=None, filter_non_reproducible=True):
 
     if model is None:
         model = load_checkpoint(configs.model.ckpt_dir)
-
-    if model is None:
-        model = train_autoencoder(configs, data, features)
+    else:
+        raise ValueError('no model for experiment name')
+    # if model is None:
+        # model = train_autoencoder(configs, data, features)
 
     X_control =  data_preprocess[data_preprocess['Metadata_set'] == 'test_ctrl'].reset_index(drop=True)
     X_test = data_preprocess[data_preprocess['Metadata_set'] == 'test_treat']

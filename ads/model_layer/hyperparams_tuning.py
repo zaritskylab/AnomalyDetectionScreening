@@ -11,7 +11,6 @@ def tune_hyperparams(dataloaders, features, configs):
                                             hidden_size = configs.model.latent_dim,
                                             deep_decoder=configs.model.deep_decoder,
                                             encoder_type=configs.model.encoder_type, 
-                                            model_type=configs.model.model_type,
                                             max_epochs=configs.model.max_epochs_in_trial,
                                             tune_l2=configs.model.tune_l2,
                                             tune_l1=configs.model.tune_l1,
@@ -30,7 +29,6 @@ def tune_hyperparams(dataloaders, features, configs):
     # Initialize model
 
     hparams = {'input_size': len(features),
-        'model_type': configs.model.model_type,
         # 'latent_size': trial.params['hidden_size'],
         'latent_size': configs.model.latent_dim,
         'l2_lambda': configs.model.l2_lambda,
@@ -51,7 +49,7 @@ def tune_hyperparams(dataloaders, features, configs):
     return hparams
 
 # Define a PyTorch Lightning model evaluation function for Optuna
-def objective(trial, dataloaders,features,hidden_size=None,deep_decoder=False, encoder_type = 'default',model_type='AE',max_epochs=100,tune_l2=None,tune_l1=None, l2_lambda=0, l1_latent_lambda=0):
+def objective(trial, dataloaders,features,hidden_size=None,deep_decoder=False, encoder_type = 'default',max_epochs=100,tune_l2=None,tune_l1=None, l2_lambda=0, l1_latent_lambda=0):
     # Define hyperparameters to tune    
 
     if hidden_size is None:
@@ -80,7 +78,6 @@ def objective(trial, dataloaders,features,hidden_size=None,deep_decoder=False, e
         'dropout': dropout,
         # 'batch_size': batch_size,
         'deep_decoder': deep_decoder,
-        'model_type': model_type,
         'encoder_type': encoder_type
     }
     

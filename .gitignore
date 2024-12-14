@@ -18,3 +18,11 @@ notebooks/shap_analysis.ipynb
 **/__pycache__/
 .vscode/
 **/.ipynb_checkpoints/
+sample_data/CellPainting/replicate_level_cp_augmented.csv
+sample_data/CellPainting/replicate_level_cp_augmented.csv.gz
+sample_data/CellPainting/replicate_level_cp_normalized_variable_selected.csv.gz
+sample_data/CellPainting/replicate_level_cp_normalized.csv.gz
+sample_data/L1000/replicate_level_l1k_QNORM.csv.gz
+sample_data/L1000/replicate_level_l1k_ZSPCQNORM.csv.gz
+sample_data/L1000/replicate_level_l1k.csv.gz
+.vscode/launch.json

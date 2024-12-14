@@ -21,6 +21,32 @@ All augmented per-well aggregated Cell Painting datasets were downloaded from th
 5. Run `python ads/main.py`. This script will run the anomaly detection pipeline and subsequent analyses: train the anomaly detection model, calculate percent replicating, train mechanism of action (MoA) and generate SHAP-based anomaly explanations.
 6. Run additional notebooks under 'notebooks/' to generate figures and tables.
 
+
+## Project structure:
+
+```project/
+│
+├── src/
+│   ├── utils/
+│   │   ├── general.py
+│   │   ├── configuration.py
+│   │   └── logger.py
+│   ├── pipeline/
+│   │   ├── anomaly_pipeline.py
+│   │   └── eval_pipeline.py
+│   └── scripts/
+│       ├── calc_reproducibility.py
+│       ├── classify_moa.py
+│       └── shap_anomalies.py
+│
+├── configs/
+│   ├── default.yaml
+│   └── experiment.yaml
+│
+├── requirements.txt
+├── main.py
+└── README.md'''
+
 [comment]: <> (You can automatically download a model from HF using the script `download-model.py`:)
 
 [comment]: <> (    python download-model.py organization/model)
@@ -140,7 +166,6 @@ bioRxiv 2023.02.19.529100; doi: https://doi.org/10.1101/2023.02.19.529100 -->
 
 [comment]: <> (| `--wbits WBITS`           | Load a pre-quantized model with specified precision in bits. 2, 3, 4 and 8 are supported. |)
 
-[comment]: <> (| `--model_type MODEL_TYPE` | Model type of pre-quantized model. Currently LLaMA, OPT, and GPT-J are supported. |)
 
 [comment]: <> (| `--groupsize GROUPSIZE`   | Group size. |)
 

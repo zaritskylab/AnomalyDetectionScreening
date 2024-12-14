@@ -4,13 +4,31 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+    
+
+
+
+
+
+    
         {
-            "name": "Python: Current File",
+            "name": "main",
             "type": "python",
             "request": "launch",
-            "program": "${file}",
+            "program": "ads/main.py",
             "console": "integratedTerminal",
-            "justMyCode": true
+            "justMyCode": true, 
+            "args": ["--debug_mode ", "True"]
+        },
+
+        {
+            "name": "main_new",
+            "type": "python",
+            "request": "launch",
+            "program": "main_new.py",
+            "console": "integratedTerminal",
+            "justMyCode": true, 
+            "args": ["--config", "configs/default_config.yaml", "--debug_mode"]
         }
     ]
 }

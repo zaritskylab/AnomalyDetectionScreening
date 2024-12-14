@@ -1,0 +1,15 @@
+general:
+  exp_name: "test_exp"
+  dataset: "CDRP-bio"
+  debug_mode: false
+  seed: 42
+
+data:
+  profile_type: "augmented"
+  modality: "CellPainting"
+  # norm_method: "mad_robustize"
+
+model:
+  tune_hyperparams: false
+  deep_decoder: false
+  encoder_type: "shallow"

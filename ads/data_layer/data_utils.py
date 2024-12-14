@@ -190,10 +190,8 @@ def read_replicate_single_modality_level_profiles(dataset_rootDir,dataset,profil
     dataDir=dataset_rootDir+'/preprocessed_data/'+DS_INFO_DICT[dataset]['name']+'/'
 
     if modality == 'L1000':
-        modality_str = 'l1k'
         filename = 'replicate_level_l1k.csv'
     else:
-        modality_str = 'cp'
         filename = 'replicate_level_cp_'+profileType+'.csv'
     if len(exp_name)>0:
         cp_dataDir = dataset_rootDir+'/anomaly_output/'+dataset

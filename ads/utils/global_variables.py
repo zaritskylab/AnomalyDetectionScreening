@@ -1,9 +1,15 @@
-from utils.eval_utils import get_color_from_palette
+from eval_layer.eval_utils import get_color_from_palette
 
 BASE_DIR = '/sise/assafzar-group/assafzar/genesAndMorph'
 DATA_DIR = f'{BASE_DIR}/preprocessed_data'
 PROCESSED_DATA_DIR = f'{BASE_DIR}/anomaly_output'
 RESULTS_DIR = f'{BASE_DIR}/results'
+
+
+MODALITY_STR = {
+    'CellPainting':'cp',
+    'L1000':'L1000'
+}
 
 DS_INFO_DICT={
     'CDRP':{
@@ -29,7 +35,6 @@ DS_INFO_DICT={
             }
         
     },
-
     'CDRP-bio':{
         'has_dose':False,
         'has_moa':True,

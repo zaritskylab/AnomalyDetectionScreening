@@ -13,7 +13,7 @@ import pandas as pd
 from collections import defaultdict
 # from data_layer.data_utils import load_data, pre_process, construct_dataloaders
 from utils.general import save_configs,get_configs
-from interpret_layer.shap_anomalies import run_anomaly_shap
+from eval_layer.shap_anomalies import run_anomaly_shap
 import matplotlib.pyplot as plt
 import seaborn as sns
 
@@ -44,7 +44,7 @@ logger = logging.getLogger(__name__)
 
 def main(configs):
 
-    configs.general.logging_dir = configs.general.output_exp_dir
+    configs.general.logging_dir = configs.general.output_dir
 
     configs.general.logger.info(os.getcwd())
     configs.general.logger.info('*' * 10)
@@ -54,7 +54,7 @@ def main(configs):
     if configs.general.flow in ['run_ad']:
         eval_model = True
         diff_filename = f'replicate_level_cp_{configs.data.profile_type}_ae_diff.csv' 
-        run_flag = not os.path.exists(os.path.join(configs.general.output_exp_dir, diff_filename)) or configs.general.overwrite_experiment
+        run_flag = not os.path.exists(os.path.join(configs.general.output_dir, diff_filename)) or configs.general.overwrite_experiment
         if run_flag or configs.general.debug_mode:
             # save_profiles(test_treat_out_normalized_diff, output_dir, diff_filename)
             if configs.general.run_both_profiles:
@@ -128,7 +128,7 @@ if __name__ == "__main__":
     if len(sys.argv) < 2:
         
         # exp_name = 'test9_1704'
-        exp_name = 'try295'
+        exp_name = 'try0612'
         configs = set_configs(exp_name) 
 
         # CP Profile Type options: 'augmented' , 'normalized', 'normalized_variable_selected'
@@ -159,7 +159,7 @@ if __name__ == "__main__":
         configs.data.profile_type = 'normalized'
         configs.data.profile_type = 'augmented'
         configs.moa.moa_dirname = 'MoAprediction_single'
-        configs.eval.calc_l1k = True
+        configs.eval.with_l1k = True
         configs.eval.rand_reps = 1
         configs.general.run_all_datasets = False
 
@@ -192,10 +192,10 @@ if __name__ == "__main__":
     for d in datasets:
         configs.general.dataset = d
         configs = set_paths(configs)
-        config_path = os.path.join(configs.general.output_exp_dir,'args.pkl')
+        config_path = os.path.join(configs.general.output_dir,'args.pkl')
         if os.path.exists(config_path):
             print('Experiment already exists! Loading configs from file')
-            configs = get_configs(configs.general.output_exp_dir)
+            configs = get_configs(configs.general.output_dir)
             configs.general.from_file = True
 
         for param in HYPER_PARAMS[d].keys():
@@ -216,10 +216,10 @@ if __name__ == "__main__":
         # configs.model.encoder_type = HYPER_PARAMS[d]['encoder_type']
         # configs.model.deep_decoder = HYPER_PARAMS[d]['deep_decoder']
         # configs.model.batch_size = HYPER_PARAMS[d]['batch_size']
-        if configs.data.modality == 'CellPainting':
-            configs.data.modality_str = 'cp'
+        # if configs.data.modality == 'CellPainting':
+            # MODALITY_STR[configs.data.modality] = 'cp'
         elif configs.data.modality == 'L1000':
-            configs.data.modality_str = 'l1k'
+            # configs.data.MODALITY_STR[configs.data.modality] = 'l1k'
             configs.data.do_fs = False
         # configs.general.exp_name = revise_exp_name(configs)
         # if configs.data.feature_selection:

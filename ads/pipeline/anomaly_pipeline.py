@@ -15,6 +15,7 @@ import os
 from model_layer.AEModel import AutoencoderModel
 from data_layer.data_preprocess import pre_process, construct_dataloaders,normalize
 from data_layer.data_utils import save_profiles, load_data
+from utils.global_variables import MODALITY_STR
 import os
 from typing import Dict, Union
 import torch
@@ -31,7 +32,7 @@ def anomaly_pipeline(configs):
     '''
 
     data , __ = load_data(configs.general.base_dir,configs.general.dataset,configs.data.profile_type, modality=configs.data.modality)
-    data_preprocess,features =  pre_process(data,configs,configs.data.data_reps)
+    data_preprocess,features =  pre_process(data,configs)
     dataloaders = construct_dataloaders(data_preprocess,configs.model.batch_size,features)
     model = train_autoencoder(dataloaders, features, configs)
 
@@ -41,10 +42,10 @@ def anomaly_pipeline(configs):
     diffs_ctrl = preds['test_ctrl'] - data_preprocess[data_preprocess['Metadata_set'] == 'test_ctrl'][features].values
     diffs_treat = preds['test_treat'] -  data_preprocess[data_preprocess['Metadata_set'] == 'test_treat'][features].values 
 
-    __ =post_process_anomaly_and_save(data_preprocess, preds['test_ctrl'],preds['test_treat'], configs.general.output_exp_dir,  f'replicate_level_{configs.data.modality_str}_{configs.data.profile_type}_preds', configs, features)
-    # z_preds_normalized = save_treatments(data, z_preds['test_ctrl'],z_preds['test_treat'], configs.general.output_exp_dir,  f'replicate_level_{configs.data.modality_str}_{configs.data.profile_type}_ae_embeddings', configs, features, embeddings=True)
+    __ =post_process_anomaly_and_save(data_preprocess, preds['test_ctrl'],preds['test_treat'], configs.general.output_dir,  f'replicate_level_{MODALITY_STR[configs.data.modality]}_{configs.data.profile_type}_preds', configs, features)
+    # z_preds_normalized = save_treatments(data, z_preds['test_ctrl'],z_preds['test_treat'], configs.general.output_dir,  f'replicate_level_{configs.data.MODALITY_STR[configs.data.modality]}_{configs.data.profile_type}_ae_embeddings', configs, features, embeddings=True)
     __ = post_process_anomaly_and_save(data_preprocess, diffs_ctrl,diffs_treat, 
-        configs.general.output_exp_dir,  f'replicate_level_{configs.data.modality_str}_{configs.data.profile_type}_ae_diff', configs, features)
+        configs.general.output_dir,  f'replicate_level_{MODALITY_STR[configs.data.modality]}_{configs.data.profile_type}_ae_diff', configs, features)
             
         
 
@@ -70,7 +71,7 @@ def train_autoencoder(dataloaders, features, configs,losses = {}):
                 'dropout': configs.model.dropout,
                 'batch_size': configs.model.batch_size,
                 'deep_decoder': configs.model.deep_decoder,
-                'model_type': configs.model.model_type,
+
                 'encoder_type': configs.model.encoder_type
             }
     
@@ -146,7 +147,7 @@ def test_autoencoder2(model, X, features, configs):
 
 
 # Define a PyTorch Lightning model evaluation function for Optuna
-def objective(trial, dataloaders,features,hidden_size=None,deep_decoder=False, encoder_type = 'default',model_type='AE',max_epochs=100,tune_l2=None,tune_l1=None, l2_lambda=0, l1_latent_lambda=0):
+def objective(trial, dataloaders,features,hidden_size=None,deep_decoder=False, encoder_type = 'default',max_epochs=100,tune_l2=None,tune_l1=None, l2_lambda=0, l1_latent_lambda=0):
     # Define hyperparameters to tune    
 
     if hidden_size is None:
@@ -175,7 +176,6 @@ def objective(trial, dataloaders,features,hidden_size=None,deep_decoder=False, e
         'dropout': dropout,
         # 'batch_size': batch_size,
         'deep_decoder': deep_decoder,
-        'model_type': model_type,
         'encoder_type': encoder_type
     }
     
@@ -235,7 +235,6 @@ def tune_hyperparams(dataloaders, features, configs):
                                             hidden_size = configs.model.latent_dim,
                                             deep_decoder=configs.model.deep_decoder,
                                             encoder_type=configs.model.encoder_type, 
-                                            model_type=configs.model.model_type,
                                             max_epochs=configs.model.max_epochs_in_trial,
                                             tune_l2=configs.model.tune_l2,
                                             tune_l1=configs.model.tune_l1,
@@ -254,7 +253,6 @@ def tune_hyperparams(dataloaders, features, configs):
     # Initialize model
 
     hparams = {'input_size': len(features),
-        'model_type': configs.model.model_type,
         # 'latent_size': trial.params['hidden_size'],
         'latent_size': configs.model.latent_dim,
         'l2_lambda': configs.model.l2_lambda,

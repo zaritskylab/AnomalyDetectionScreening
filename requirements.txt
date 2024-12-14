@@ -11,3 +11,10 @@ scikit-learn
 tensorboard
 pycytominer
 scipy==1.8.0
+seaborn
+matplotlib
+openpyxl
+shap
+imbalanced-learn
+optuna
+matplotlib-venn

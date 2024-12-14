@@ -11,7 +11,7 @@ from sklearn.model_selection import GroupShuffleSplit, StratifiedShuffleSplit, t
 from torch.utils.data import DataLoader
 from data_layer.data_utils import save_profiles, get_features
 from data_layer.tabular_dataset import TabularDataset
-from utils.global_variables import DS_INFO_DICT
+from utils.global_variables import DS_INFO_DICT, MODALITY_STR
 from utils.file_utils import load_list_from_txt, save_list_to_txt
 
 #TODO: transform each dataset info to dicts
@@ -83,11 +83,11 @@ def pre_process(data, configs,data_reps = ['ae_diff','baseline']):
   features, meta_features = get_features(data,configs.data.modality)
 
   ######### data normalization by training set #########
-  train_filename = f'replicate_level_{configs.data.modality_str}_{configs.data.profile_type}_normalized_by_train'
-  train_path = os.path.join(configs.general.output_exp_dir, f'{train_filename}.csv')
-  save_data_flag = not os.path.exists(train_path) or configs.general.overwrite_experiment
+  train_filename = f'replicate_level_{MODALITY_STR[configs.data.modality]}_{configs.data.profile_type}_normalized_by_train'
+  train_path = os.path.join(configs.general.output_dir, f'{train_filename}.csv')
+  save_data_flag = not os.path.exists(train_path) or configs.data.overwrite_experiment
 
-  if save_data_flag or configs.data.run_data_process:
+  if save_data_flag or not configs.data.use_cache:
 
     # split data with equal samples from different plates (DS_INFO_DICT[configs.general.dataset[3]])
     data_splitted = split_data(data, configs.general.dataset, configs.data.test_split_ratio, modality=configs.data.modality, n_samples_for_training=configs.data.n_samples_for_training,random_state=configs.general.seed)
@@ -96,14 +96,6 @@ def pre_process(data, configs,data_reps = ['ae_diff','baseline']):
     log_data_stats(data_splitted, configs)
 
     if configs.data.profile_type == 'augmented':
-
-      # # Calculate the variance of each feature
-      # variances = data_splitted[features].var()
-      # Get the names of features with variance lower than var_threshold
-      # low_variance_features = variances[variances <configs.data.var_threshold].index.tolist()
-      # data_splitted.drop(low_variance_features, axis=1, inplace=True)
-      # features = [f for f in features if f not in low_variance_features]
-      # print(f'number of features with low variance: {len(low_variance_features)}')
 
       print('normalizing to training set...')
       # normalized_df_by_train = normalize(data_splitted,features, configs.data.modality,norm_method="standardize", normalize_condition = configs.data.normalize_condition,plate_normalized=configs.data.plate_normalized, clip_outliers=False)
@@ -114,10 +106,6 @@ def pre_process(data, configs,data_reps = ['ae_diff','baseline']):
       
       print('feature selection after normalization...')
       configs.general.logger.info(f'number of features before feature selection: {len(features)}')
-      # features, cols_to_drop = feature_selection(normalized_df_by_train,configs.data.corr_threshold,features, var_threshold =  configs.data.var_threshold, blocklist_features = DS_INFO_DICT[configs.general.dataset][configs.data.modality]['blocklist_features'])
-      feature_select_ops = ['drop_na_columns', 'variance_threshold', 'correlation_threshold', 'drop_outliers']
-
-      # df_normalized_by_all = normalize(data_splitted,features, configs.data.modality,norm_method="standardize", normalize_condition ='all',plate_normalized=True, clip_outliers=False)
 
       fs_ops = ['drop_na_columns', 'variance_threshold', 'correlation_threshold', 'drop_outliers']
       df_normalized_by_all_feature_selected = feature_select(
@@ -135,6 +123,7 @@ def pre_process(data, configs,data_reps = ['ae_diff','baseline']):
       
       new_features = [f for f in df_normalized_by_all_feature_selected.columns if f.startswith('Cells_') or f.startswith('Cytoplasm_') or f.startswith('Nuclei_')]
       cols_to_drop = [f for f in features if f not in new_features]
+
       # add all granulirity features back for the CDRP test
       # if configs.general.dataset == 'CDRP-bio':
         # granurality_agp_features = sorted([f for f in features if ('Granularity' in f) and ('AGP' in f)])
@@ -155,10 +144,10 @@ def pre_process(data, configs,data_reps = ['ae_diff','baseline']):
 
 
     if not configs.general.debug_mode:
-      save_profiles(df_normalized_feature_selected, configs.general.output_exp_dir, train_filename)
+      save_profiles(df_normalized_feature_selected, configs.general.output_dir, train_filename)
 
-    raw_filename = f'replicate_level_{configs.data.modality_str}_{configs.data.profile_type}_baseline'
-    raw_path = os.path.join(os.path.join(configs.general.output_exp_dir, raw_filename))
+    raw_filename = f'replicate_level_{MODALITY_STR[configs.data.modality]}_{configs.data.profile_type}_baseline'
+    raw_path = os.path.join(os.path.join(configs.general.output_dir, raw_filename))
 
     save_data_flag = not os.path.exists(raw_path) or configs.general.overwrite_experiment
 
@@ -175,7 +164,7 @@ def pre_process(data, configs,data_reps = ['ae_diff','baseline']):
         print(f'calclating raw measurements for {d}...')
         try:
           if 'baseline' in d:
-            raw_filename = f'replicate_level_{configs.data.modality_str}_{configs.data.profile_type}_{d}'
+            raw_filename = f'replicate_level_{configs.data.MODALITY_STR[configs.data.modality]}_{configs.data.profile_type}_{d}'
             raw_data = normalize(test_data,features, configs.data.modality, normalize_condition = 'test_ctrl',plate_normalized=configs.data.plate_normalized)
             # elif d == 'baseline_unchanged':
             #   raw_data = data_splitted.copy()
@@ -188,8 +177,8 @@ def pre_process(data, configs,data_reps = ['ae_diff','baseline']):
           #   raw_data = normalize(test_data,features, configs.data.modality, normalize_condition = 'test_ctrl',plate_normalized=configs.data.plate_normalized, norm_method = 'spherize', clip_outliers=False,spherize_method=d)
                       
           if save_data_flag:
-            raw_filename = f'replicate_level_{configs.data.modality_str}_{configs.data.profile_type}_{d}'
-            save_profiles(raw_data, configs.general.output_exp_dir, raw_filename)
+            raw_filename = f'replicate_level_{configs.data.MODALITY_STR[configs.data.modality]}_{configs.data.profile_type}_{d}'
+            save_profiles(raw_data, configs.general.output_dir, raw_filename)
         except:
           print(f'failed to normalize with {d}')
           continue

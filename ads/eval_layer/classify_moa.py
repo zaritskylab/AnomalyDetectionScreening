@@ -25,23 +25,18 @@ from sklearn.linear_model import LogisticRegression
 import matplotlib.pyplot as plt
 import pickle
 
-currentdir = '/sise/home/alonshp/AnomalyDetectionScreening'
+# currentdir = '/sise/home/alonshp/AnomalyDetectionScreening'
 
 # currentdir = os.path.dirname('home/alonshp/AnomalyDetectionScreeningLocal/')
 # print(currentdir)
-sys.path.insert(0, os.getcwd())
-sys.path.insert(0, currentdir)
+# sys.path.insert(0, os.getcwd())
+# sys.path.insert(0, currentdir)
 
-from utils.general import revise_exp_name, set_configs, set_paths,set_seed, add_exp_suffix
+
 from utils.global_variables import DS_INFO_DICT, ABRVS
-
-# from utils.eval_utils import filter_data_by_highest_dose
-from data_layer.data_utils import get_cp_path, get_cp_dir, read_paired_treatment_level_profiles, read_treatment_level_profiles, filter_data_by_highest_dose
+from data_layer.data_utils import read_paired_treatment_level_profiles
 # from utils.reproduce_funcs import get_median_correlation, get_duplicate_replicates, get_replicates_score
-from utils.general import write_dataframe_to_excel
-from utils.file_utils import load_df_pickles_and_concatenate
-
-
+from utils.file_utils import write_dataframe_to_excel, load_df_pickles_and_concatenate
 
 # adapted from https://github.com/carpenter-singh-lab/2022_Haghighi_NatureMethods/tree/main/App2.MoA_prediction 
 
@@ -51,14 +46,14 @@ from utils.file_utils import load_df_pickles_and_concatenate
 def main(configs, data_reps = None):
 
     # make sure that data_rep exists in the output directory
-    data_reps = [dr for dr in data_reps if any(dr in string for string in os.listdir(configs.general.output_exp_dir))]
+    data_reps = [dr for dr in data_reps if any(dr in string for string in os.listdir(configs.general.output_dir))]
     if data_reps is None:
         Types = ['baseline','ae_diff']
         data_reps = [f'{configs.data.profile_type}_{t}' for t in Types]
         
 
     if configs.general.flow in ['run_moa']:
-        run_classifier(configs, data_reps = data_reps)
+        run_moa_classifier(configs, data_reps = data_reps)
     elif configs.general.flow in ['concat_moa_res']:
         # print('skipping classify_moa')
         concat_exps_results(configs, data_reps = data_reps)
@@ -151,7 +146,7 @@ def get_filter_rep_params(dataset, exp_suffix,repCorrFilePath, filter_groups,fil
 ############################################################################################################
 
 
-def run_classifier(configs, data_reps = None):
+def run_moa_classifier(configs, data_reps = None):
 
     # repCorrFilePath=f'{configs.general.res_dir}/{rep_corr_fileName}.xlsx'
     # repCorrFilePath=f'{base_dir}/RepCorrDF_{profileType}.xlsx'
@@ -216,7 +211,7 @@ def run_classifier(configs, data_reps = None):
         profTypeAbbrev = [ABRVS[profileType] for profileType in data_reps]
 
         # try:
-        methods = load_data_filtered_by_rep_corr(configs, data_reps, filter_repCorr_params,run_l1k=configs.moa.run_l1k, data_dir=save_dir)
+        methods = load_data_filtered_by_rep_corr(configs, data_reps, filter_repCorr_params,run_l1k=configs.moa.with_l1k, data_dir=save_dir)
         
         if configs.moa.do_fusion:
             profTypeAbbrev.append(f'fuse')
@@ -384,7 +379,7 @@ def run_cross_validation(methods,configs,cls_model, p, coefs_all_cvs, coefs_all)
         sm1=RandomOverSampler(sampling_strategy='not majority',random_state=configs.moa.exp_seed)
 
         
-        if configs.moa.run_l1k:
+        if configs.moa.with_l1k:
             reps_for_training = ['CP','Early Fusion','GE']
         else:
             reps_for_training = ['CP']
@@ -512,7 +507,7 @@ def run_single_validation_for_all_models(methods, configs,sampler,moa_pred_res,p
         # shap.summary_plot(shap_values_norm)
 
         
-    if configs.moa.run_l1k:
+    if configs.moa.with_l1k:
         prob_sum = probs[0]
         for pro in range(1,len(probs)):
             prob_sum+=probs[pro]                    
@@ -524,8 +519,8 @@ def run_single_validation_for_all_models(methods, configs,sampler,moa_pred_res,p
     return methods, moa_pred_res, probs, coefs_all_cvs, coefs_all
 ############################################################################################################
     
-def compute_f1_scores(moa_pred_res, exp_name = None,run_l1k = False):
-    if run_l1k:
+def compute_f1_scores(moa_pred_res, exp_name = None,with_l1k = False):
+    if with_l1k:
         methods= ['CP','GE','Early Fusion','Late Fusion']
     else:
         methods= ['CP']
@@ -609,7 +604,7 @@ def remove_multi_label_moa(data,moa_col_name='Metadata_moa', multi_label_symbol=
     return data_no_multi, data_multi
 
 ############################################################################################################
-def load_data_filtered_by_rep_corr(configs, data_reps, filter_repCorr_params, pertColName='PERT',run_l1k = False,data_dir=None,filter_by_highest_dose=False,z_trim=None):
+def load_data_filtered_by_rep_corr(configs, data_reps, filter_repCorr_params, pertColName='PERT',with_l1k = False,data_dir=None):
 
     moa_col='Metadata_MoA'
     moa_col_name='Metadata_moa_with_n'
@@ -771,7 +766,7 @@ def load_data_filtered_by_rep_corr(configs, data_reps, filter_repCorr_params, pe
     for p in methods.keys():
 
         # run classification based on l1k data only
-        if run_l1k:
+        if with_l1k:
             methods[p]['data4eval'].append([methods[p]['l1k_scaled'][methods[p]['l1k_scaled'][moa_col].isin(listOfSelectedMoAs)].reset_index(drop=True),l1k_features])
             # methods.append([filteredMOAs,methods[p]['cp_features']+l1k_features])
     if data_dir is not None:
@@ -812,98 +807,98 @@ def map_moa_data_to_classes(data, moa_col, moa_col_name, listOfSelectedMoAs, n_s
         return filteredMOAs
 
 if __name__ == '__main__':
+    pass
 
-
-    configs = set_configs()
-    if len(sys.argv) <2:
-        exp_name = 'final_94_t'
-        configs.general.exp_name = exp_name
-        configs.general.dataset = 'LINCS'
-        configs.general.dataset = 'CDRP-bio'
-        configs.data.profile_type = 'normalized_variable_selected'
-        configs.data.profile_type = 'augmented'
-        configs.data.modality = 'CellPainting'
-        configs.eval.by_dose = False
-        configs.eval.filter_by_highest_dose = True
-        slice_id = 0
-        configs.general.flow ='concat_moa_res'
-        configs.general.flow ='run_moa'
-        configs.moa.do_all_filter_groups = False
+    # configs = set_configs()
+    # if len(sys.argv) <2:
+    #     exp_name = 'final_94_t'
+    #     configs.general.exp_name = exp_name
+    #     configs.general.dataset = 'LINCS'
+    #     configs.general.dataset = 'CDRP-bio'
+    #     configs.data.profile_type = 'normalized_variable_selected'
+    #     configs.data.profile_type = 'augmented'
+    #     configs.data.modality = 'CellPainting'
+    #     configs.eval.by_dose = False
+    #     configs.eval.filter_by_highest_dose = True
+    #     slice_id = 0
+    #     configs.general.flow ='concat_moa_res'
+    #     configs.general.flow ='run_moa'
+    #     configs.moa.do_all_filter_groups = False
         
-        configs.general.debug_mode = False
-        configs.moa.min_samples = 4
-        configs.moa.tune = False
-        configs.eval.normalize_by_all = True
-        configs.eval.run_dose_if_exists = True
-        configs.moa.moa_dirname = 'moa_single'
-        configs.moa.folds = 5
-        configs.eval.z_trim = 8
+    #     configs.general.debug_mode = False
+    #     configs.moa.min_samples = 4
+    #     configs.moa.tune = False
+    #     configs.eval.normalize_by_all = True
+    #     configs.eval.run_dose_if_exists = True
+    #     configs.moa.moa_dirname = 'moa_single'
+    #     configs.moa.folds = 5
+    #     configs.eval.z_trim = 8
 
-    else:
-        # exp_name = sys.argv[1]
-        # configs = set_configs()
-        # profileType = configs.data.profile_type
-        # dataset = configs.general.dataset
-        slice_id = configs.general.slice_id
-        # exp_name = configs.general.exp_name
-        # modality = configs.data.modality
-        # by_dose = configs.eval.by_dose
-        configs.general.exp_num = configs.general.slice_id
-        configs.general.flow = 'run_moa'
-        # configs.general.moa_dirname = 'False'
+    # else:
+    #     # exp_name = sys.argv[1]
+    #     # configs = set_configs()
+    #     # profileType = configs.data.profile_type
+    #     # dataset = configs.general.dataset
+    #     slice_id = configs.general.slice_id
+    #     # exp_name = configs.general.exp_name
+    #     # modality = configs.data.modality
+    #     # by_dose = configs.eval.by_dose
+    #     configs.general.exp_num = configs.general.slice_id
+    #     configs.general.flow = 'run_moa'
+    #     # configs.general.moa_dirname = 'False'
 
-    configs = set_paths(configs)
+    # configs = set_paths(configs)
 
-    slice_id = int(slice_id)
-    ################################################
-    # datasets=['TAORF','LUAD','LINCS', 'CDRP-bio']
-    # DT_kfold={'LUAD':10, 'TAORF':5, 'LINCS':25, 'CDRP-bio':6,'CDRP':40}
+    # slice_id = int(slice_id)
+    # ################################################
+    # # datasets=['TAORF','LUAD','LINCS', 'CDRP-bio']
+    # # DT_kfold={'LUAD':10, 'TAORF':5, 'LINCS':25, 'CDRP-bio':6,'CDRP':40}
 
 
-    ################################################
-    # filtering to compounds which have high replicates for both GE and CP datasets
-    # 'highRepUnion','highRepOverlap','', 'onlyCP'
-    configs.moa.rep_corr_fileName='RepCorrDF'
-    # configs.moa.filter_by_pr = filter_by_pr
-    configs.moa.filter_perts = 'highRepUnion'
-    # debug=False
+    # ################################################
+    # # filtering to compounds which have high replicates for both GE and CP datasets
+    # # 'highRepUnion','highRepOverlap','', 'onlyCP'
+    # configs.moa.rep_corr_fileName='RepCorrDF'
+    # # configs.moa.filter_by_pr = filter_by_pr
+    # configs.moa.filter_perts = 'highRepUnion'
+    # # debug=False
 
-    # Types = ['ae','ae_error', 'baseline']sq
-    data_reps = ['ae_diff', 'baseline','PCA', 'ZCA']
+    # # Types = ['ae','ae_error', 'baseline']sq
+    # data_reps = ['ae_diff', 'baseline','PCA', 'ZCA']
     
-    rand_ints_list = random.sample(range(0,1000), configs.moa.n_exps)
-    print(rand_ints_list)
-    # exp_num = slice_id
-    configs.moa.exp_seed = rand_ints_list[configs.general.exp_num]
-    set_seed(configs.moa.exp_seed)
+    # rand_ints_list = random.sample(range(0,1000), configs.moa.n_exps)
+    # print(rand_ints_list)
+    # # exp_num = slice_id
+    # configs.moa.exp_seed = rand_ints_list[configs.general.exp_num]
+    # set_seed(configs.moa.exp_seed)
 
-    print(f'slice_id is {slice_id}, exp_seed is {configs.moa.exp_seed}')
+    # print(f'slice_id is {slice_id}, exp_seed is {configs.moa.exp_seed}')
 
-    profile_types = [p for p in ['augmented','normalized_variable_selected'] if any(p in string for string in os.listdir(configs.general.output_exp_dir))]
+    # profile_types = [p for p in ['augmented','normalized_variable_selected'] if any(p in string for string in os.listdir(configs.general.output_dir))]
 
-    if DS_INFO_DICT[configs.general.dataset]['has_dose']:
-        if configs.eval.run_dose_if_exists:
-            doses = [False,True]
-        else:
-            doses = [configs.eval.by_dose]
-    else:
-        doses = [False]
+    # if DS_INFO_DICT[configs.general.dataset]['has_dose']:
+    #     if configs.eval.run_dose_if_exists:
+    #         doses = [False,True]
+    #     else:
+    #         doses = [configs.eval.by_dose]
+    # else:
+    #     doses = [False]
         
-    # for n in normalize_by_alls:
-    # methods = [f'{configs.data.profile_type}_{m}' for m in ['ae_diff', 'baseline']]
-        # for f in filter_combs:
-    for d in doses:
-        for p in profile_types:
-            # if configs.general.dataset == 'CDRP-bio' and d:
-                # continue
-            if configs.general.dataset == 'LINCS' and p == 'normalized_variable_selected':
-                continue
-            # print( f'running {p} {d} normalize{n}')
+    # # for n in normalize_by_alls:
+    # # methods = [f'{configs.data.profile_type}_{m}' for m in ['ae_diff', 'baseline']]
+    #     # for f in filter_combs:
+    # for d in doses:
+    #     for p in profile_types:
+    #         # if configs.general.dataset == 'CDRP-bio' and d:
+    #             # continue
+    #         if configs.general.dataset == 'LINCS' and p == 'normalized_variable_selected':
+    #             continue
+    #         # print( f'running {p} {d} normalize{n}')
             
-        # try:
-            # configs.eval.normalize_by_all = n
-            configs.data.profile_type = p
-            configs.eval.by_dose = d
-            # configs.moa.filter_groups = f
-        # configs = set_paths(configs)
-            main(configs, data_reps)
+    #     # try:
+    #         # configs.eval.normalize_by_all = n
+    #         configs.data.profile_type = p
+    #         configs.eval.by_dose = d
+    #         # configs.moa.filter_groups = f
+    #     # configs = set_paths(configs)
+    #         main(configs, data_reps)

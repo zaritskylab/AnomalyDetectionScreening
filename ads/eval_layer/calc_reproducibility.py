@@ -1,15 +1,7 @@
-import random
-from collections import defaultdict, Counter
-from statistics import median
+
 import numpy as np
-from tqdm import tqdm
-import sys
-import pickle
 import os
 import pandas as pd
-import glob
-from collections import defaultdict
-from statistics import median
 import matplotlib.pyplot as plt
 import seaborn as sns
 from matplotlib_venn import venn2, venn2_circles, venn3, venn3_circles
@@ -18,17 +10,12 @@ currentdir = '/sise/home/alonshp/AnomalyDetectionScreening'
 # sys.path.insert(0, os.getcwd())
 # sys.path.insert(0, currentdir)
 
-from utils.general import revise_exp_name, set_configs, set_paths, add_exp_suffix, write_dataframe_to_excel
-from utils.global_variables import DS_INFO_DICT, METHOD_NAME_MAPPING
-from data_layer.data_utils import load_zscores
-from data_layer.data_utils import get_cp_path, get_cp_dir, filter_data_by_highest_dose
-# from utils.reproduce_funcs import get_duplicate_replicates, get_null_distribution_replicates,get_replicates_score
-from utils.eval_utils import get_color_from_palette
-# from utils.metrics import extract_ss_score, extract_new_score_for_compound, extract_ss_score_for_compound
-from utils.eval_utils import replicateCorrs, calc_rand_corr
-from sklearn.preprocessing import MinMaxScaler, StandardScaler
+from utils.config_utils import set_configs, add_exp_suffix
+from utils.file_utils import write_dataframe_to_excel
 
-# adapted from https://github.com/carpenter-singh-lab/2022_Haghighi_NatureMethods/blob/main/utils/replicateCorrs.py 
+from utils.global_variables import DS_INFO_DICT, METHOD_NAME_MAPPING, MODALITY_STR
+from data_layer.data_utils import load_zscores, get_cp_dir
+
 
 
 def calc_percent_replicating(configs,data_reps = ['ae_diff','baseline']):
@@ -36,22 +23,18 @@ def calc_percent_replicating(configs,data_reps = ['ae_diff','baseline']):
     base_dir= '/sise/assafzar-group/assafzar/genesAndMorph'
     # data_dir = get_cp_dir(configs)
     data_dir =  get_cp_dir(base_dir,configs.general.dataset,configs.data.profile_type)
-    l1k_data_dir = get_cp_dir(base_dir,configs.general.dataset,configs.data.profile_type,modality='L1000')
+    # l1k_data_dir = get_cp_dir(base_dir,configs.general.dataset,configs.data.profile_type,modality='L1000')
     run_dist_plots = False
     # exp_name= 'ae_12_09_fs'
     
 
-    output_dir = configs.general.output_exp_dir
+    output_dir = configs.general.output_dir
     null_base_dir = f'{base_dir}/results/{configs.general.dataset}/'
     exp_save_dir = configs.general.res_dir
 
     debug = configs.general.debug_mode
     # debug = False
     l1k_data_dir = os.path.dirname(data_dir) + '/L1000'
-    if configs.data.modality == 'CellPainting':
-        modality_str = 'cp'
-    else:
-        modality_str = 'l1k'
 
     # include profile type in list if it is a file in folder 'output_dir'
     profile_types = [p for p in ['augmented','normalized_variable_selected'] if any(p in string for string in os.listdir(output_dir))]
@@ -66,9 +49,9 @@ def calc_percent_replicating(configs,data_reps = ['ae_diff','baseline']):
         configs.general.logger.info(f'calculating for profile type:{p}')
         methods = {}
         for dr in data_reps:
-            methods[dr] = {'name':dr,'path':os.path.join(output_dir,f'replicate_level_{modality_str}_{p}_{dr}.csv')}
+            methods[dr] = {'name':dr,'path':os.path.join(output_dir,f'replicate_level_{MODALITY_STR[configs.data.modality]}_{p}_{dr}.csv')}
         
-        if configs.eval.calc_l1k:
+        if configs.eval.with_l1k:
             methods['l1k'] = {'name':'L1000','path': os.path.join(l1k_data_dir,f'replicate_level_l1k_{p}.csv.gz')}
 
         os.makedirs(exp_save_dir,exist_ok=True)
@@ -245,122 +228,128 @@ def calc_replicate_corrs(methods, dataset,cpd_col = 'cpd_col',exp_suffix = '',co
 
     return methods
 
+# adapted from https://github.com/carpenter-singh-lab/2022_Haghighi_NatureMethods/blob/main/utils/replicateCorrs.py
 
-################################################
+def replicateCorrs(inDf,pertColName,featColNames,plotEnabled,reps=5):
+    
+    """ 
+    Calculates replicate correlation versus across purtburtion correlations
+  
+    This function takes the input dataframe and output/plot replicate correlations. 
+  
+    Parameters: 
+    inDf   (pandas df): input dataframe contains metadata and features
+    pertColName  (str): The column based on which we define replicates of a purturbation
+    featColNames(list): The list of all columns corresponding to features
+    plotEnabled (bool): If True or 1, plots the curves 
+    
+    Returns: 
+    repCorrDf   (list):  
+  
+    """
+    
+    
+    df=inDf.copy()
+    df[featColNames]=inDf[featColNames].interpolate();
+    uniqPert=df[pertColName].unique().tolist()
+    repC=[]
+    randC=[]
+    
+    repCorrDf=pd.DataFrame(index = uniqPert,columns=['RepCor']) 
+    
+    
+    repSizeDF=df.groupby([pertColName]).size().reset_index()
+    highRepComp=repSizeDF[repSizeDF[0]>1][pertColName].tolist()
 
-def run_pr_plot(methods,data_reps,fig_dir,savename=None):
+    
+    for u in highRepComp:
+        df1=df[df[pertColName]==u].drop_duplicates().reset_index(drop=True)
+#         df2=df[df[pertColName]!=u].drop_duplicates().reset_index(drop=True)
 
-    sns.set_context("paper",font_scale = 1.8, rc={"font.size":8,"axes.titlesize":16,"axes.labelsize":16,"axes.facecolor": "white","axes.style": "ticks"})
-    sns.set_style("ticks")
+        repCorrPurtbs=df1.loc[:,featColNames].T.corr()
+        repCorr=list(repCorrPurtbs.values[np.triu_indices(repCorrPurtbs.shape[0], k = 1)])
+#         print(repCorr)
+        repCorrDf.loc[u,'RepCor']=np.nanmean(repCorr)
+#         print(repCorr)
+#         repCorr=np.sort(np.unique(df1.loc[:,featColNames].T.corr().values))[:-1].tolist()
+#         repC=repC+repCorr
+        repC=repC+[np.nanmedian(repCorr)]
 
-    ncols = len(data_reps)
-    # plot distribution of replicate and random correlations
-    max_y_val = 0
-    fig, axes = plt.subplots(nrows=1,ncols=ncols,figsize=(5*ncols,3.8),sharey=True, sharex=True)
-
-    if len(data_reps)>1:
-        for i, m in enumerate(data_reps):
-
-            # plot distribution of replicate and random correlations
-            # repC = methods[m]['rep_corr']
-            # randC_v2 = methods[m]['rand_corr']
-            # repCorrDf = methods[m]['corr_df']   
-        
-            perc90=np.percentile(methods[m]['rand_corr'], 90);
-
-            rgb_values = get_color_from_palette("Set2", i)
-            sns.kdeplot(methods[m]['rep_corr'], bw_method=.15, label=f"{methods[m]['name']}",ax=axes[i],color=rgb_values,linewidth=2, fill =True);
-            sns.kdeplot(methods[m]['rep_corr'], bw_method=.15, ax=axes[i],color=rgb_values,linewidth=1, fill =False);
-
-            curr_max_y_val = np.max(axes[i].lines[0].get_data())
-            max_y_val = max(max_y_val,curr_max_y_val)
-            axes[i].set_xlabel('Correlation');
-            
-            # axes[i].set_title(METHOD_NAME_MAPPING[methods[m]['name']])
-
-            if i == 1:
-                axes[i].axvline(x=methods[m]['rand90'],linestyle=':',color = 'firebrick', linewidth=2, label='corr threshold')
-                sns.kdeplot(methods[m]['rand_corr'], bw_method=.2, label="Random pairs",ax=axes[i],color='darkgrey')
-            else:
-                axes[i].axvline(x=methods[m]['rand90'],linestyle=':',color = 'firebrick', linewidth=2)
-                sns.kdeplot(methods[m]['rand_corr'], bw_method=.2, ax=axes[i],color='darkgrey')
-            axes[i].axvline(x=0,linestyle=':',color='k', linewidth=1);
-
-        y_lim = np.max(max_y_val * 1.33)
-        text_y_loc = y_lim*0.65
-        for i, m in enumerate(data_reps):
-            axes[i].text(0.08+methods[m]['rand90'], text_y_loc,str(int(np.round(methods[m]['percent_replicating'],2)))+ '%>t',fontsize=14) #add text
-
-    else:
-        m='l1k'
-        ncols =1 
-        fig, axes = plt.subplots(nrows=1,ncols=ncols,figsize=(4.5*ncols,4))
-                
-
-        # repCorrDf = methods[m]['corr_df']
-        sns.kdeplot(methods[m]['rep_corr'], bw_method=.15, label="replicate pairs",ax=axes);
-        sns.kdeplot(methods[m]['rep_corr'], bw_method=.15, label=f"{methods[m]['name']}",ax=axes,linewidth=2, fill =True);
-        axes.axvline(x=methods[m]['rand90'],linestyle=':',color = 'firebrick', linewidth=2, label='corr threshold')
-        sns.kdeplot(methods[m]['rand_corr'], bw_method=.2, label="Random pairs",ax=axes,color='darkgrey')
-        axes.axvline(x=0,linestyle=':',color='k', linewidth=1);
-
-        axes.set_xlabel('Correlation');
-
-        curr_max_y_val = np.max(axes.lines[0].get_data())
-        max_y_val = max(max_y_val,curr_max_y_val)
-        y_lim = np.max(max_y_val * 1.33)
-        text_y_loc = y_lim*0.65
-        # for i, m in enumerate(data_reps):
-        axes.text(0.08+methods[m]['rand90'], text_y_loc,str(int(np.round(methods[m]['percent_replicating'],2)))+ '%>t',fontsize=14) #add text
+    randC_v2=calc_rand_corr(inDf,pertColName,featColNames,reps=reps)
 
         
-    if savename is None:
-        savename = f'{m}_RC'
+    if 0:
+        fig, axes = plt.subplots(figsize=(5,3))
+        sns.kdeplot(randC, bw=.1, label="random pairs",ax=axes)
+        sns.kdeplot(repC, bw=.1, label="replicate pairs",ax=axes);axes.set_xlabel('CC');
+        sns.kdeplot(randC_v2, bw=.1, label="random v2 pairs",ax=axes);axes.set_xlabel('CC');
+#         perc5=np.percentile(repCC, 50);axes.axvline(x=perc5,linestyle=':',color='darkorange');
+#         perc95=np.percentile(randCC, 90);axes.axvline(x=perc95,linestyle=':');
+        axes.legend();#axes.set_title('');
+        axes.set_xlim(-1.1,1.1)
+        
+    repC = [repC for repC in repC if str(repC) != 'nan']
+    
+    perc95=np.percentile(randC_v2, 90);
+    rep10=np.percentile(repC, 10);
+    
+    if plotEnabled:
+        fig, axes = plt.subplots(figsize=(5,4))
+#         sns.kdeplot(randC_v2, bw=.1, label="random pairs",ax=axes);axes.set_xlabel('CC');
+#         sns.kdeplot(repC, bw=.1, label="replicate pairs",ax=axes,color='r');axes.set_xlabel('CC');
+        sns.distplot(randC_v2,kde=True,hist=True,bins=100,label="random pairs",ax=axes,norm_hist=True);
+        sns.distplot(repC,kde=True,hist=True,bins=100,label="replicate pairs",ax=axes,norm_hist=True,color='r');   
 
-    plt.ylim(0,y_lim)
-    plt.xlim(-1,1.2)
-    plt.tight_layout() 
-    debug = False
-    if not debug:
-        plt.savefig(f'{fig_dir}/{savename}.png',dpi=500)
-    plt.close()
+        #         perc5=np.percentile(repCC, 50);axes.axvline(x=perc5,linestyle=':',color='darkorange');
+        axes.axvline(x=perc95,linestyle=':');
+        axes.axvline(x=0,linestyle=':');
+        axes.legend(loc=2);#axes.set_title('');
+        axes.set_xlim(-1,1);
+        plt.tight_layout() 
+        
+    repCorrDf['Rand90Perc']=perc95
+    repCorrDf['Rep10Perc']=rep10
+#     highRepPertbs=repCorrDf[repCorrDf['RepCor']>perc95].index.tolist()
+#     return repCorrDf
+    return [randC_v2,repC,repCorrDf]
 
+def calc_rand_corr(inDf,pertColName,featColNames,reps = 5):
+    randC_v2=[]    
+    # reps = 5
+    random_states = [42+i for i in range(reps)]
+    # random_integers = [np.random.randint(0, 1000) for i in range(reps)]
+    for i in range(reps):
+        uniqeSamplesFromEachPurt=inDf.groupby(pertColName)[featColNames].apply(lambda s: s.sample(1,random_state=random_states[i]))
+        corrMatAcrossPurtbs=uniqeSamplesFromEachPurt.loc[:,featColNames].T.corr()
+        randCorrVals=list(corrMatAcrossPurtbs.values[np.triu_indices(corrMatAcrossPurtbs.shape[0], k = 1)])
+        randC_v2=randC_v2+randCorrVals
+    randC_v2 = [randC_v2 for randC_v2 in randC_v2 if str(randC_v2) != 'nan']    
+    return randC_v2
 
-
-def compute_venn2_subsets(a, b):
-
-    if not (type(a) == type(b)):
-        raise ValueError("Both arguments must be of the same type")
-    set_size = len if type(a) != Counter else lambda x: sum(x.values())   # We cannot use len to compute the cardinality of a Counter
-    return (set_size(a - b), set_size(b - a), set_size(a & b))
 
 
 if __name__ == '__main__':
 
     configs = set_configs()
-    if len(sys.argv) <2:
-        exp_name = 'interpret_2603'
-        configs.general.exp_name = exp_name
-        configs.general.dataset = 'LINCS'
-        configs.general.dataset = 'CDRP-bio'
-        # configs.general.dataset = 'TAORF'
+    # if len(sys.argv) <2:
+    #     exp_name = 'interpret_2603'
+    #     configs.general.exp_name = exp_name
+    #     configs.general.dataset = 'LINCS'
+    #     configs.general.dataset = 'CDRP-bio'
+    #     # configs.general.dataset = 'TAORF'
 
-        configs.data.profile_type = 'augmented'
-        configs.data.modality = 'CellPainting'
-        configs.eval.by_dose = False
-        configs.data.corr_threshold = 0.9
-        configs.general.debug_mode = False
-        configs.eval.normalize_by_all = True
-        configs.eval.run_dose_if_exists = True
-        configs.eval.filter_by_highest_dose = True
-        configs.eval.calc_l1k = True
-        configs.general.overwrite_experiment = False
-        data_reps = ['ae_diff','baseline']
-    configs = set_paths(configs)
-    calc_percent_replicating(configs,data_reps)
+    #     configs.data.profile_type = 'augmented'
+    #     configs.data.modality = 'CellPainting'
+    #     configs.eval.by_dose = False
+    #     configs.data.corr_threshold = 0.9
+    #     configs.general.debug_mode = False
+    #     configs.eval.normalize_by_all = True
+    #     configs.eval.run_dose_if_exists = True
+    #     configs.eval.filter_by_highest_dose = True
+    #     configs.eval.calc_l1k = True
+    #     configs.general.overwrite_experiment = False
+    #     data_reps = ['ae_diff','baseline']
+    # configs = set_paths(configs)
+    # calc_percent_replicating(configs,data_reps)
 
     # DT_kfold={'LUAD':10, 'TAORF':5, 'LINCS':25, 'CDRP-bio':6,'CDRP':40}
-
-
-
-    
