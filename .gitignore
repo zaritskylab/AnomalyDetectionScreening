@@ -7,8 +7,8 @@ ads/utils/utils_unused.py
 ads/scripts/experiments/**
 ads/scripts/n_samples_analysis.py
 ads/scripts/whichGPU.py
-ads/data_layer/dataset.py
-ads/data_layer/image_dataset.py
+ads/data/dataset.py
+ads/data/image_dataset.py
 2.MoA_prediction/
 notebooks/2a-Modality_Integration_CDRP_train.ipynb
 notebooks/umap_analysis.ipynb
@@ -26,3 +26,4 @@ sample_data/L1000/replicate_level_l1k_QNORM.csv.gz
 sample_data/L1000/replicate_level_l1k_ZSPCQNORM.csv.gz
 sample_data/L1000/replicate_level_l1k.csv.gz
 .vscode/launch.json
+

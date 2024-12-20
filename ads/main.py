@@ -11,9 +11,8 @@ import logging
 import pickle
 import pandas as pd 
 from collections import defaultdict
-# from data_layer.data_utils import load_data, pre_process, construct_dataloaders
 from utils.general import save_configs,get_configs
-from eval_layer.shap_anomalies import run_anomaly_shap
+from eval.shap_anomalies import run_anomaly_shap
 import matplotlib.pyplot as plt
 import seaborn as sns
 

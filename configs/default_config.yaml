@@ -57,15 +57,11 @@ DataArguments:
   var_threshold: 0.0001 # "Variance threshold for feature selection."
     
 ModelArguments:
-  model_path: "None" # "Path for pre-trained models."
-    
   lr: 0.005 # "Learning rate."
   dropout: 0.0 # "Dropout rate."
   latent_dim: 16 # "Size of latent dimension."
   l2_lambda: 0.007 # "L2 regularization lambda."
-  tune_l2: true # "Tune L2 regularization as part of hyperparameter tuning."
   l1_latent_lambda: 0 # "L1 regularization lambda for latent dimension."
-  tune_l1: false # "Tune L1 regularization as part of hyperparameter tuning."
   batch_size: 32 # "Batch size."
   max_epochs: 500 # "Maximum number of epochs."
   # use_16bit: false # "Use 16-bit precision for training."

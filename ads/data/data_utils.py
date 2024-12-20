@@ -20,25 +20,6 @@ labelCol='PERT'
 
 ################################################################################
 
-def load_data(base_dir,dataset, profile_type,whole_plate_normalization = False, modality = 'CellPainting'):
-  '''
-  Load data from the given dataset and profile type
-  
-  Args:
-  base_dir: string. path to the data directory
-  dataset: string. options: ['CDRP','CDRP-bio','TAORF','LUAD','LINCS']
-  profile_type: string. options: ['normalized','augmented','normalized_variable_selected']
-  whole_plate_normalization: boolean. normalize plate-wise by all samples in the plate
-  modality: string. options: ['CellPainting']. 'L1000' is not supported yet
-
-  '''
-
-  [data, cp_features] = read_replicate_single_modality_level_profiles(base_dir, dataset, profile_type ,per_plate_normalized_flag=whole_plate_normalization, modality=modality)
-  features, meta_features = get_features(data, modality)
-  
-  return data, features
-
-
 ##########################################################
 
 def get_features(df, modality = 'CellPainting'):
@@ -57,7 +38,8 @@ def get_features(df, modality = 'CellPainting'):
 ################################################################################
 
 
-def load_zscores(methods,base_dir,dataset, profile_type,normalize_by_all=False,by_dose=False,z_trim=None,sample='treated',set_index=True,debug=False, filter_by_highest_dose=False, min_max_norm=False):
+def load_zscores(methods,base_dir,dataset, profile_type,normalize_by_all=False,by_dose=False,z_trim=None,sample='treated',set_index=True,debug_mode=False, filter_by_highest_dose=False, min_max_norm=False):
+
 
     for m in methods.keys():
       print(f'loading zscores for method: {m}')
@@ -65,32 +47,34 @@ def load_zscores(methods,base_dir,dataset, profile_type,normalize_by_all=False,b
           methods[m]['modality'] ='L1000'
 
           zscores, features = load_data(base_dir,dataset, profile_type,modality=methods[m]['modality'], whole_plate_normalization =normalize_by_all)
-          if debug:
-            zscores = zscores.sample(2000)
+          if debug_mode:
+                print('debug mode is on')
+                sample_size = round(len(zscores) / 10)
+                zscores = zscores.sample(sample_size)
+
           methods[m]['features']=list(features)
           
           # methods[m]['zscores'] = zscores.loc[:,methods[m]['features']]
       else:
-          methods[m]['modality']='CellPainting'
-          zscores = pd.read_csv(methods[m]['path'], compression = 'gzip', low_memory=False)   
-          if debug:
-            zscores = zscores.sample(2000)  
-          if m == 'anomaly_emb':
-              meta_features = [c for c in zscores.columns if 'Metadata_' in c]
-              features = [c for c in zscores.columns if 'Metadata_' not in c]
-          else:
-              features = zscores.columns[zscores.columns.str.contains("Cells_|Cytoplasm_|Nuclei_")]
-          methods[m]['features']=list(features)
+        methods[m]['modality']='CellPainting'
+        zscores = pd.read_csv(methods[m]['path'], compression = 'gzip', low_memory=False)   
+        if debug_mode:
+            print('debug mode is on')
+            sample_size = round(len(zscores) / 10)
+            zscores = zscores.sample(sample_size)
+        
+        if m == 'anomaly_emb':
+        #   meta_features = [c for c in zscores.columns if 'Metadata_' in c]
+            features = [c for c in zscores.columns if 'Metadata_' not in c]
+        else:
+            features = zscores.columns[zscores.columns.str.contains("Cells_|Cytoplasm_|Nuclei_")]
+        methods[m]['features']=list(features)
 
-          if normalize_by_all:
-              zscores = standardize_per_catX(zscores,DS_INFO_DICT[dataset]['CellPainting']['plate_col'],methods[m]['features'])
+        if normalize_by_all:
+            zscores = standardize_per_catX(zscores,DS_INFO_DICT[dataset]['CellPainting']['plate_col'],methods[m]['features'])
 
-      # zscores = zscores.query(f"{DS_INFO_DICT[dataset][methods[m]['modality']]['role_col']} != '{DS_INFO_DICT[dataset][methods[m]['modality']]['mock_val']}' ")
-
-      # zscores = zscores.query('Metadata_ASSAY_WELL_ROLE == "treated"')
       if sample=='treated':
         zscores = zscores.query(f"{DS_INFO_DICT[dataset][methods[m]['modality']]['role_col']} != '{DS_INFO_DICT[dataset][methods[m]['modality']]['mock_val']}' ")
-
         
       elif sample=='mock':
         zscores = zscores.query(f"{DS_INFO_DICT[dataset][methods[m]['modality']]['role_col']} == '{DS_INFO_DICT[dataset][methods[m]['modality']]['mock_val']}' ")
@@ -613,109 +597,6 @@ def highRepFinder(dataset,how,repCorrFilePath, profile_types_filtered=None, save
         pickle.dump(highRepPerts, open(f'highRepPerts_{all_profiles_acronym}_.pkl', 'wb'))
         
     return highRepPerts
-
-
-################################################################################
-# def read_paired_replicate_level_profiles(dataset_rootDir,dataset,profileType,nRep,\
-#                                          filter_repCorr_params,per_plate_normalized_flag):
-
-#     """
-#     Reads replicate level CSV files (scaled replicate level profiles per plate)
-#     Rename the column names to match across datasets to PERT in both modalities
-#     Remove perturbations with low rep corr across both (filter_perts='highRepOverlap') 
-#             or one of the modalities (filter_perts='highRepUnion')
-#     Form treatment level profiles by averaging the replicates
-#     Select and keep the metadata columns you want to keep for each dataset
-#     Merge dataframes by PERT column
-    
-#     Inputs:
-#     dataset_rootDir: datasets root dir
-#     dataset: any from the available list of ['LUAD', 'TAORF', 'LINCS', 'CDRP-bio', 'CDRP']
-#     profileType:   Cell Painting profile type that can be 'augmented' , 'normalized', 'normalized_variable_selected'
-
-#     Output: 
-#     mergedProfiles_treatLevel: paired treatment level profiles
-#     cp_features,l1k_features list of feature names for each of modalities
-#     """
-    
-#     filter_perts=filter_repCorr_params[0]
-#     repCorrFilePath=filter_repCorr_params[1]
-#     if len(filter_repCorr_params)>2:    
-#         profile_types_filtered = filter_repCorr_params[2]
-#     else:
-#         profile_types_filtered = None    
-
-#     [cp_data_repLevel,cp_features], [l1k_data_repLevel,l1k_features] = read_replicate_level_profiles(dataset_rootDir,dataset,profileType,per_plate_normalized_flag,exp_name='');
-        
-
-#     ############ rename columns that should match to PERT
-#     cp_data_repLevel=cp_data_repLevel.rename(columns={DS_INFO_DICT[dataset]['dose_col']:labelCol})
-#     l1k_data_repLevel=l1k_data_repLevel.rename(columns={DS_INFO_DICT[dataset]['dose_col']:labelCol})    
-            
-    
-#     ###### print some data statistics
-#     print(dataset+': Replicate Level Shapes (nSamples x nFeatures): cp: ',\
-#           cp_data_repLevel.shape[0],',',len(cp_features),  ',  l1k: ',l1k_data_repLevel.shape[0],',',len(l1k_features))
-
-#     print('l1k n of rep: ',l1k_data_repLevel.groupby([labelCol]).size().median())
-#     print('cp n of rep: ',cp_data_repLevel.groupby([labelCol]).size().median())
-    
-
-#     # ###### remove perts with low rep corr
-#     # if filter_perts=='highRepOverlap':    
-#     #     highRepPerts = highRepFinder(dataset,'intersection',repCorrFilePath,profile_types_filtered=profile_types_filtered) + ['negcon'];
-        
-#     #     cp_data_repLevel=cp_data_repLevel[cp_data_repLevel['PERT'].isin(highRepPerts)].reset_index()
-#     #     l1k_data_repLevel=l1k_data_repLevel[l1k_data_repLevel['PERT'].isin(highRepPerts)].reset_index()  
-        
-#     # elif filter_perts=='highRepUnion':
-#     #     highRepPerts = highRepFinder(dataset,'union',repCorrFilePath, profile_types_filtered=profile_types_filtered) + ['negcon'];
-        
-#     #     cp_data_repLevel=cp_data_repLevel[cp_data_repLevel['PERT'].isin(highRepPerts)].reset_index()
-#     #     l1k_data_repLevel=l1k_data_repLevel[l1k_data_repLevel['PERT'].isin(highRepPerts)].reset_index()      
-    
-
-#     # mergedProfiles_repLevel=generate_random_match_of_replicate_pairs(cp_data_repLevel, l1k_data_repLevel,nRep)
-#     merge_profiles(cp_data_rep_level, l1k_data_rep_level,repCorrFilePath, profile_types_filtered,nRep,filter_perts = 'highUnion')
-    
-#     return mergedProfiles_repLevel,cp_features,l1k_features
-
-
-# def merge_profiles(cp_data_rep_level, l1k_data_rep_level,repCorrFilePath, profile_types_filtered,nRep,filter_perts = 'highRepUnion', save_reproducible = False):
-
-
-#     # ############ rename columns that should match to PERT
-#     # cp_data_repLevel=cp_data_repLevel.rename(columns={ds_info_dict[dataset][1][0]:labelCol})
-#     # l1k_data_repLevel=l1k_data_repLevel.rename(columns={ds_info_dict[dataset][1][1]:labelCol})    
-            
-    
-#     # ###### print some data statistics
-#     # print(dataset+': Replicate Level Shapes (nSamples x nFeatures): cp: ',\
-#     #       cp_data_repLevel.shape[0],',',len(cp_features),  ',  l1k: ',l1k_data_repLevel.shape[0],',',len(l1k_features))
-
-#     # print('l1k n of rep: ',l1k_data_repLevel.groupby([labelCol]).size().median())
-#     # print('cp n of rep: ',cp_data_repLevel.groupby([labelCol]).size().median())
-    
-
-#     ###### remove perts with low rep corr
-#     if filter_perts=='highRepOverlap':    
-#         highRepPerts = highRepFinder(dataset,'intersection',repCorrFilePath,profile_types_filtered=profile_types_filtered, save_reproducible = save_reproducible) + ['negcon'];
-        
-#         cp_data_repLevel=cp_data_repLevel[cp_data_repLevel['PERT'].isin(highRepPerts)].reset_index()
-#         l1k_data_repLevel=l1k_data_repLevel[l1k_data_repLevel['PERT'].isin(highRepPerts)].reset_index()  
-        
-#     elif filter_perts=='highRepUnion':
-#         highRepPerts = highRepFinder(dataset,'union',repCorrFilePath, profile_types_filtered=profile_types_filtered, save_reproducible = save_reproducible) + ['negcon'];
-        
-#         cp_data_repLevel=cp_data_repLevel[cp_data_repLevel['PERT'].isin(highRepPerts)].reset_index()
-#         l1k_data_repLevel=l1k_data_repLevel[l1k_data_repLevel['PERT'].isin(highRepPerts)].reset_index()   
-#     else:
-#         raise ValueError('filter_perts should be either "highRepOverlap" or "highRepUnion" ')   
-    
-
-#     mergedProfiles_repLevel=generate_random_match_of_replicate_pairs(cp_data_repLevel, l1k_data_repLevel,nRep)
-
-#     return mergedProfiles_repLevel
 
 
 def rename_affyprobe_to_genename(l1k_data_df,l1k_features,map_source_address):

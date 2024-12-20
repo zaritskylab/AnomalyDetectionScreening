@@ -9,20 +9,31 @@ from pycytominer.operations import variance_threshold, get_na_columns, correlati
 from sklearn import preprocessing
 from sklearn.model_selection import GroupShuffleSplit, StratifiedShuffleSplit, train_test_split,ShuffleSplit
 from torch.utils.data import DataLoader
-from data_layer.data_utils import save_profiles, get_features
-from data_layer.tabular_dataset import TabularDataset
+from data.data_utils import save_profiles, get_features, read_replicate_single_modality_level_profiles
+from data.tabular_dataset import TabularDataset
 from utils.global_variables import DS_INFO_DICT, MODALITY_STR
 from utils.file_utils import load_list_from_txt, save_list_to_txt
 
-#TODO: transform each dataset info to dicts
-# ds_info_dict={'CDRP':['CDRP-BBBC047-Bray',['Metadata_Sample_Dose','pert_sample_dose'],['Metadata_ASSAY_WELL_ROLE','mock'],'Metadata_Plate'],
-#               'CDRP-bio':['CDRPBIO-BBBC036-Bray',['Metadata_Sample_Dose','pert_sample_dose'],['Metadata_ASSAY_WELL_ROLE','mock'],'Metadata_Plate'],
-#               'TAORF':['TA-ORF-BBBC037-Rohban',['Metadata_broad_sample','pert_id',]],
-#               'LUAD':['LUAD-BBBC041-Caicedo',['x_mutation_status','allele']],
-#               'LINCS':['LINCS-Pilot1',['Metadata_pert_id_dose','pert_id_dose'],['Metadata_pert_type','control'],'Metadata_plate_map_name']}
 
+##########################################################
 
-# index_fields =
+def load_data(base_dir,dataset, profile_type,whole_plate_normalization = False, modality = 'CellPainting'):
+  '''
+  Load data from the given dataset and profile type
+  
+  Args:
+  base_dir: string. path to the data directory
+  dataset: string. options: ['CDRP','CDRP-bio','TAORF','LUAD','LINCS']
+  profile_type: string. options: ['normalized','augmented','normalized_variable_selected']
+  whole_plate_normalization: boolean. normalize plate-wise by all samples in the plate
+  modality: string. options: ['CellPainting']. 'L1000' is not supported yet
+
+  '''
+
+  [data, cp_features] = read_replicate_single_modality_level_profiles(base_dir, dataset, profile_type ,per_plate_normalized_flag=whole_plate_normalization, modality=modality)
+  features, meta_features = get_features(data, modality)
+  
+  return data, features
 
 
 
@@ -85,10 +96,15 @@ def pre_process(data, configs,data_reps = ['ae_diff','baseline']):
   ######### data normalization by training set #########
   train_filename = f'replicate_level_{MODALITY_STR[configs.data.modality]}_{configs.data.profile_type}_normalized_by_train'
   train_path = os.path.join(configs.general.output_dir, f'{train_filename}.csv')
-  save_data_flag = not os.path.exists(train_path) or configs.data.overwrite_experiment
+  save_data_flag = not (os.path.exists(train_path) and configs.data.use_cache)
 
-  if save_data_flag or not configs.data.use_cache:
+  # load from cache if exists
+  if os.path.exists(train_path) and configs.data.use_cache:
+      print('loading normalized data from file...')
+      df_normalized_feature_selected = pd.read_csv(train_path,compression='gzip')
+      features = get_features(df_normalized_feature_selected,configs.data.modality)[0]
 
+  else:
     # split data with equal samples from different plates (DS_INFO_DICT[configs.general.dataset[3]])
     data_splitted = split_data(data, configs.general.dataset, configs.data.test_split_ratio, modality=configs.data.modality, n_samples_for_training=configs.data.n_samples_for_training,random_state=configs.general.seed)
     meta_features += ['Metadata_set']
@@ -149,7 +165,7 @@ def pre_process(data, configs,data_reps = ['ae_diff','baseline']):
     raw_filename = f'replicate_level_{MODALITY_STR[configs.data.modality]}_{configs.data.profile_type}_baseline'
     raw_path = os.path.join(os.path.join(configs.general.output_dir, raw_filename))
 
-    save_data_flag = not os.path.exists(raw_path) or configs.general.overwrite_experiment
+    save_data_flag = not (os.path.exists(raw_path) or configs.data.use_cache)
 
     if save_data_flag:
 
@@ -162,31 +178,26 @@ def pre_process(data, configs,data_reps = ['ae_diff','baseline']):
       for d in data_reps[1:]:
 
         print(f'calclating raw measurements for {d}...')
-        try:
-          if 'baseline' in d:
-            raw_filename = f'replicate_level_{configs.data.MODALITY_STR[configs.data.modality]}_{configs.data.profile_type}_{d}'
-            raw_data = normalize(test_data,features, configs.data.modality, normalize_condition = 'test_ctrl',plate_normalized=configs.data.plate_normalized)
-            # elif d == 'baseline_unchanged':
-            #   raw_data = data_splitted.copy()
-            # else:
-            #   raw_data = normalize(data_splitted,features, configs.data.modality, normalize_condition = 'DMSO',plate_normalized=configs.data.plate_normalized, clip_outliers=False)
-            #   raw_data = raw_data.loc[test_indices, :]
-            # # normalize data by DMSO
+        # try:
+        if 'baseline' in d:
+          raw_filename = f'replicate_level_{MODALITY_STR[configs.data.modality]}_{configs.data.profile_type}_{d}'
+          raw_data = normalize(test_data,features, configs.data.modality, normalize_condition = 'test_ctrl',plate_normalized=configs.data.plate_normalized)
+          # elif d == 'baseline_unchanged':
+          #   raw_data = data_splitted.copy()
           # else:
-          # # if configs.data.norm_method == 'spherize':
-          #   raw_data = normalize(test_data,features, configs.data.modality, normalize_condition = 'test_ctrl',plate_normalized=configs.data.plate_normalized, norm_method = 'spherize', clip_outliers=False,spherize_method=d)
-                      
-          if save_data_flag:
-            raw_filename = f'replicate_level_{configs.data.MODALITY_STR[configs.data.modality]}_{configs.data.profile_type}_{d}'
-            save_profiles(raw_data, configs.general.output_dir, raw_filename)
-        except:
-          print(f'failed to normalize with {d}')
-          continue
-          
-  else:
-    print('loading normalized data from file...')
-    df_normalized_feature_selected = pd.read_csv(train_path,compression='gzip')
-    features = get_features(df_normalized_feature_selected,configs.data.modality)[0]
+          #   raw_data = normalize(data_splitted,features, configs.data.modality, normalize_condition = 'DMSO',plate_normalized=configs.data.plate_normalized, clip_outliers=False)
+          #   raw_data = raw_data.loc[test_indices, :]
+          # # normalize data by DMSO
+        # else:
+        # # if configs.data.norm_method == 'spherize':
+        #   raw_data = normalize(test_data,features, configs.data.modality, normalize_condition = 'test_ctrl',plate_normalized=configs.data.plate_normalized, norm_method = 'spherize', clip_outliers=False,spherize_method=d)
+                    
+        if save_data_flag:
+          raw_filename = f'replicate_level_{MODALITY_STR[configs.data.modality]}_{configs.data.profile_type}_{d}'
+          save_profiles(raw_data, configs.general.output_dir, raw_filename)
+        # except:
+          # print(f'failed to normalize with {d}')
+          # continue
 
   return df_normalized_feature_selected, features
 

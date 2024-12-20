@@ -82,16 +82,14 @@ class DataArguments:
 
 @dataclass
 class ModelArguments:
-    model_path: Optional[str] = field(default="None",
-                                      metadata={"help": "If we want to load pre-trained model from path"})
     lr: Optional[float] = field(default=0.005, metadata={"help": "learning rate"})
     dropout: Optional[float] = field(default=0.0, metadata={"help": "dropout rate"})
     latent_dim: Optional[int] = field(default=16, metadata={"help": "latent dim size"})
     # l2_lambda: Optional[float] = field(default=0.0, metadata={"help": "l2 regularization lambda"})
     l2_lambda: Optional[float] = field(default=0.007, metadata={"help": "l2 regularization lambda"})
-    tune_l2: Optional[bool] = field(default=True, metadata={"help": "if True, tune l2 regularization lambda as part of hyperparam tuning"})
+    # tune_l2: Optional[bool] = field(default=True, metadata={"help": "if True, tune l2 regularization lambda as part of hyperparam tuning"})
     l1_latent_lambda: Optional[float] = field(default=0, metadata={"help": "l1 regularization lambda for latent dim"})
-    tune_l1: Optional[bool] = field(default=False, metadata={"help": "if True, tune l1 regularization lambda as part of hyperparam tuning"})
+    # tune_l1: Optional[bool] = field(default=False, metadata={"help": "if True, tune l1 regularization lambda as part of hyperparam tuning"})
     batch_size: Optional[int] = field(default=32, metadata={"help": "batch size"})
     max_epochs: Optional[int] = field(default=500, metadata={"help": "maximal number of epochs"})
     # use_16bit: Optional[bool] = field(default=False, metadata={"help": "use 16bit precision"})

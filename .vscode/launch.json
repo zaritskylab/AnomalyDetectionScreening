@@ -4,12 +4,16 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
-    
 
-
-
-
-
+        {
+            "name": "eval",
+            "type": "python",
+            "request": "launch",
+            "program": "main_new.py",
+            "console": "integratedTerminal",
+            "justMyCode": true, 
+            "args": ["--config", "configs/default_config.yaml", "--debug_mode", "--flow", "eval"]
+        },
     
         {
             "name": "main",
@@ -28,7 +32,7 @@
             "program": "main_new.py",
             "console": "integratedTerminal",
             "justMyCode": true, 
-            "args": ["--config", "configs/default_config.yaml", "--debug_mode"]
+            "args": ["--config", "configs/default_config.yaml"]
         }
     ]
 }

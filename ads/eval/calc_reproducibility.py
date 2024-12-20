@@ -14,31 +14,47 @@ from utils.config_utils import set_configs, add_exp_suffix
 from utils.file_utils import write_dataframe_to_excel
 
 from utils.global_variables import DS_INFO_DICT, METHOD_NAME_MAPPING, MODALITY_STR
-from data_layer.data_utils import load_zscores, get_cp_dir
+from data.data_utils import load_zscores, get_cp_dir
+from eval.eval_utils import run_pr_plot, compute_venn2_subsets
 
 
 
 def calc_percent_replicating(configs,data_reps = ['ae_diff','baseline']):
-    
+    """
+    Calculate reproducibility of compounds and save results to a CSV file.
+
+    Args:
+        configs: Configuration object containing general settings.
+        data_reps: List of data representations.
+        debug_mode: Boolean indicating if debug mode is enabled.
+        exp_suffix: Suffix for the experiment.
+        fig_dir: Directory to save figures.
+        methods: Dictionary containing method details.
+        best_comp_method: Best comparison method.
+        exp_save_dir: Directory to save experiment results.
+        shared_cpds_with_baseline: Shared compounds with baseline.
+
+    Returns:
+        Dictionary containing results of percent replicating for each method.
+    """
+
     base_dir= '/sise/assafzar-group/assafzar/genesAndMorph'
     # data_dir = get_cp_dir(configs)
     data_dir =  get_cp_dir(base_dir,configs.general.dataset,configs.data.profile_type)
     # l1k_data_dir = get_cp_dir(base_dir,configs.general.dataset,configs.data.profile_type,modality='L1000')
-    run_dist_plots = False
     # exp_name= 'ae_12_09_fs'
     
 
     output_dir = configs.general.output_dir
-    null_base_dir = f'{base_dir}/results/{configs.general.dataset}/'
     exp_save_dir = configs.general.res_dir
 
-    debug = configs.general.debug_mode
-    # debug = False
+    debug_mode = configs.general.debug_mode
     l1k_data_dir = os.path.dirname(data_dir) + '/L1000'
 
     # include profile type in list if it is a file in folder 'output_dir'
     profile_types = [p for p in ['augmented','normalized_variable_selected'] if any(p in string for string in os.listdir(output_dir))]
     data_reps = [dr for dr in data_reps if any(dr in string for string in os.listdir(output_dir))]
+    assert len(profile_types) > 0, 'no profile types found in output_dir'
 
     for p in profile_types:
 
@@ -57,14 +73,7 @@ def calc_percent_replicating(configs,data_reps = ['ae_diff','baseline']):
         os.makedirs(exp_save_dir,exist_ok=True)
         configs.general.logger.info(f'loading from path {output_dir}')
 
-        methods = load_zscores(methods,base_dir,configs.general.dataset,p,by_dose=configs.eval.by_dose,normalize_by_all =configs.eval.normalize_by_all,z_trim=configs.eval.z_trim,set_index=False,debug=debug,min_max_norm=configs.eval.min_max_norm, filter_by_highest_dose=configs.eval.filter_by_highest_dose)
-
-        # for m in methods.keys():                            
-            # zscores = methods[m]['zscores']
-            # if there is dose information and not running by dose, use only highest dose
-            # if not configs.eval.by_dose and DS_INFO_DICT[configs.general.dataset]['has_dose'] and configs.eval.filter_by_highest_dose:
-                    # methods[m]['zscores'] = filter_data_by_highest_dose(methods[m]['zscores'], configs.general.dataset, modality = methods[m]['modality'])
-                    # configs.general.logger.info(f'filtered by highest dose: {len(zscores)} -> {len(methods[m]["zscores"])}')
+        methods = load_zscores(methods,base_dir,configs.general.dataset,p,by_dose=configs.eval.by_dose,normalize_by_all =configs.eval.normalize_by_all,z_trim=configs.eval.z_trim,set_index=False,debug_mode=debug_mode,min_max_norm=configs.eval.min_max_norm, filter_by_highest_dose=configs.eval.filter_by_highest_dose)
 
         if 'l1k' in methods.keys():
             meta_features_l1k = [c for c in methods['l1k']['zscores'].columns if '_at' in c]
@@ -77,82 +86,45 @@ def calc_percent_replicating(configs,data_reps = ['ae_diff','baseline']):
         ################ run rep correlation measurements ####################
         corr_path = f'{exp_save_dir}/RepCorrDF.xlsx'
 
-        methods = calc_replicate_corrs(methods,configs.general.dataset,cpd_col,exp_suffix,corr_path,debug,rand_reps=configs.eval.rand_reps,overwrite_experiment=configs.general.overwrite_experiment)
+        methods = calc_replicate_corrs(methods,configs.general.dataset,cpd_col,exp_suffix,corr_path,debug_mode,rand_reps=configs.eval.rand_reps,overwrite_experiment=configs.general.overwrite_experiment)
         for m in methods.keys():
             configs.general.logger.info(f"total number of cpds for {m}: {len(methods[m]['corr_df'])}")
             configs.general.logger.info(f"number of reproducible cpds for {m}: {len(methods[m]['reproducible_cpds'])}, {np.round(len(methods[m]['reproducible_cpds'])/len(methods[m]['corr_df'])*100,2)}%")
         methods_for_plot = methods.keys()
-        if configs.eval.calc_l1k:
+        if configs.eval.with_l1k:
             methods_for_plot = [m for m in methods_for_plot if m != 'l1k']
         # ncols = len(methods_for_plot)
 
         run_pr_plot(methods,methods_for_plot,fig_dir)
-        
 
-        ############
-        # find best method 
-        comp_methods = data_reps[1:]
-        compiting_methods = [m for m in comp_methods if m in methods.keys()]
-        best_comp_method = max(compiting_methods, key=lambda key: methods[key]['percent_replicating'])
-    
-        # best_method = max(methods, key=lambda key: methods[key]['percent_replicating'])
-        configs.general.logger.info(f'best method: {best_comp_method} with {methods[best_comp_method]["percent_replicating"]}% replicating')
-        ####################### plot venn diageram of shared cpds of two methods #########################
-        out = venn2([set(methods[data_reps[0]]['reproducible_cpds']), set(methods[best_comp_method]['reproducible_cpds'])], set_labels = ('Anomaly',METHOD_NAME_MAPPING[methods[best_comp_method]['name']]),  alpha=0.6,set_colors=("tab:green","tab:orange"))
-        sets = compute_venn2_subsets(set(methods[data_reps[0]]['reproducible_cpds']), set(methods[best_comp_method]['reproducible_cpds']))
-        sum_sets = sum(sets)
-        shared_cpds_pr = sum_sets/len(methods[data_reps[0]]['corr_df'])*100
-        configs.general.logger.info(f"number of reproducible cpds total: {sum_sets}, {np.round(shared_cpds_pr,2)}%")
-        
-        for text in out.set_labels:
-            if text is not None:
-                text.set_fontsize(20)
-        for text in out.subset_labels:
-            if text is not None:
-                text.set_fontsize(20)
-        if not debug:
-            venn_path= f'{fig_dir}/venn{exp_suffix}.png'
-            plt.tight_layout()
-            plt.savefig(venn_path)
-        plt.close()
+        if len(data_reps) > 1:
+            # find best method in case of comparison with other representations
+            comp_methods = data_reps[1:]
+            compiting_methods = [m for m in comp_methods if m in methods.keys()]
+
+            best_comp_method = max(compiting_methods, key=lambda key: methods[key]['percent_replicating'])
+            methods_to_compare = [data_reps[0], ]
+            configs.general.logger.info(f'best method: {best_comp_method} with {methods[best_comp_method]["percent_replicating"]}% replicating')
+
+            ####################### plot venn diageram of shared cpds of two methods #########################   
+            plot_venn2(methods, methods_to_compare, configs, debug_mode, exp_suffix, fig_dir)
+            sets = compute_venn2_subsets(set(methods[methods_to_compare[0]]['reproducible_cpds']), set(methods[methods_to_compare[1]]['reproducible_cpds']))
+            sum_sets = sum(sets)
+            shared_cpds_with_baseline = sum_sets/len(methods[data_reps[0]]['corr_df'])*100
+            configs.general.logger.info(f"number of reproducible cpds total: {sum_sets}, {np.round(shared_cpds_with_baseline,2)}%")
 
         ####################### compute L1000 replicate correlation for both methods #########################
-        if 'l1k' in methods.keys():
+        if configs.eval.with_l1k:
+            
             run_pr_plot(methods,['l1k'],fig_dir)
 
-            ####################### plot venn diageram of shared cpds of two methods #########################
-            out_l1k = venn3([set(methods[data_reps[0]]['reproducible_cpds']), set(methods[best_comp_method]['reproducible_cpds']), set(methods['l1k']['reproducible_cpds'])], set_labels = ('Anomaly',METHOD_NAME_MAPPING[methods[best_comp_method]['name']], 'L1000'),  alpha=0.6,set_colors=("tab:green","tab:orange","tab:blue"))
-
-            for text in out_l1k.set_labels:
-                if text is not None:
-                    text.set_fontsize(20)
-            for text in out_l1k.subset_labels:
-                if text is not None:
-                    text.set_fontsize(20)
-            plt.tight_layout()
-            if not debug:
-                venn_path= f'{fig_dir}/venn3{exp_suffix}.png'
-                plt.savefig(venn_path)
-            plt.close()
-
-    # plot distribution of replicate and random correlations
-            
-        if run_dist_plots:
-            for m in methods.keys():
-                a = methods[m]['zscores'][0:2000].to_numpy().flatten()
-                sns.histplot(a, bins=100)
-                plt.axvline(x=0.5,color='r')
-                plt.title(f'{m}_{p} zscores distribution')
-                # plt.xlim(-5,5)
-                # plt.show()
-
-                savename = f'{m}_zscores_dist'
-                # if configs.eval.by_dose:
-                    # savename+='_d'
-                if not debug:
-                    plt.savefig(f'{fig_dir}/{savename}.png',dpi=300)
-                plt.close()
-
+            if len(data_reps) == 1:
+                methods_to_compare = [data_reps[0], 'l1k']
+                plot_venn2(methods, methods_to_compare, configs, debug_mode, exp_suffix, fig_dir)
+            else:
+                methods_to_compare = [data_reps[0], best_comp_method, 'l1k']
+                plot_venn3(methods, methods_to_compare, configs, debug_mode, exp_suffix, fig_dir)
+    
         # create a dataframe summarizing reproducibile compounds
         cpd_col = DS_INFO_DICT[configs.general.dataset][methods[data_reps[0]]['modality']]['cpd_col']
         df_reproduce = pd.DataFrame()
@@ -176,9 +148,51 @@ def calc_percent_replicating(configs,data_reps = ['ae_diff','baseline']):
         results = {}
         for m in methods.keys():
             results[m] = methods[m]['percent_replicating']
-        results['shared_pr'] = shared_cpds_pr
+        if len(data_reps) > 1:
+            results['shared_pr'] = shared_cpds_with_baseline
 
         return results
+
+def plot_venn2(methods, methods_to_compare, configs, debug_mode=False, exp_suffix='', fig_dir=''):
+
+    assert len(methods_to_compare) == 2, 'only two methods can be compared'
+    # methods = methods[methods_to_compare]
+    out = venn2([set(methods[methods_to_compare[0]]['reproducible_cpds']), set(methods[methods_to_compare[1]]['reproducible_cpds'])], set_labels = (methods_to_compare),  alpha=0.6,set_colors=("tab:green","tab:orange"))
+            
+    for text in out.set_labels:
+        if text is not None:
+            text.set_fontsize(20)
+    for text in out.subset_labels:
+        if text is not None:
+            text.set_fontsize(20)
+    if not debug_mode:
+        venn_path= f'{fig_dir}/venn{exp_suffix}.png'
+        plt.tight_layout()
+        plt.savefig(venn_path)
+    plt.close()
+
+
+def plot_venn3(methods, methods_to_compare, configs, debug_mode=False, exp_suffix='', fig_dir=''):
+
+    assert len(methods_to_compare) == 3, 'only three methods can be compared'
+    # methods = methods[methods_to_compare]
+    out = venn3([set(methods[methods_to_compare[0]]['reproducible_cpds']), set(methods[methods_to_compare[1]]['reproducible_cpds']), set(methods[methods_to_compare[2]]['reproducible_cpds'])],
+                           set_labels = (methods_to_compare),  alpha=0.6,set_colors=("tab:green","tab:orange","tab:blue"))
+    ####################### plot venn diageram of shared cpds of two methods #########################
+
+    for text in out.set_labels:
+        if text is not None:
+            text.set_fontsize(20)
+    for text in out.subset_labels:
+        if text is not None:
+            text.set_fontsize(20)
+    plt.tight_layout()
+
+    if not debug_mode:
+        venn_path= f'{fig_dir}/venn3{exp_suffix}.png'
+        plt.savefig(venn_path)
+    plt.close()
+
 
 
 ########################### calc replicate correlations ############################
@@ -331,25 +345,3 @@ def calc_rand_corr(inDf,pertColName,featColNames,reps = 5):
 if __name__ == '__main__':
 
     configs = set_configs()
-    # if len(sys.argv) <2:
-    #     exp_name = 'interpret_2603'
-    #     configs.general.exp_name = exp_name
-    #     configs.general.dataset = 'LINCS'
-    #     configs.general.dataset = 'CDRP-bio'
-    #     # configs.general.dataset = 'TAORF'
-
-    #     configs.data.profile_type = 'augmented'
-    #     configs.data.modality = 'CellPainting'
-    #     configs.eval.by_dose = False
-    #     configs.data.corr_threshold = 0.9
-    #     configs.general.debug_mode = False
-    #     configs.eval.normalize_by_all = True
-    #     configs.eval.run_dose_if_exists = True
-    #     configs.eval.filter_by_highest_dose = True
-    #     configs.eval.calc_l1k = True
-    #     configs.general.overwrite_experiment = False
-    #     data_reps = ['ae_diff','baseline']
-    # configs = set_paths(configs)
-    # calc_percent_replicating(configs,data_reps)
-
-    # DT_kfold={'LUAD':10, 'TAORF':5, 'LINCS':25, 'CDRP-bio':6,'CDRP':40}

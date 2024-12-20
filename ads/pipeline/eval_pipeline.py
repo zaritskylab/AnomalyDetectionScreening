@@ -1,7 +1,7 @@
 from utils.global_variables import ABRVS,DS_INFO_DICT, HYPER_PARAMS
-from eval_layer.calc_reproducibility import calc_percent_replicating as calc_percent_replicating
-from eval_layer.classify_moa import run_moa_classifier
-from eval_layer.shap_anomalies import run_anomaly_shap
+from eval.calc_reproducibility import calc_percent_replicating as calc_percent_replicating
+from eval.classify_moa import run_moa_classifier
+from eval.shap_anomalies import run_anomaly_shap
 
 
 def eval_pipeline(configs):
@@ -10,16 +10,14 @@ def eval_pipeline(configs):
     Args:
         configs (dict): Configuration dictionary.
     """
-    logger = logging.getLogger(__name__)
-    logger.info("Starting evaluation pipeline.")
-    
+
     res = {}
-    res['rc'] = calc_percent_replicating(configs,data_reps=data_reps)
+    res['rc'] = calc_percent_replicating(configs)
     
     if configs.eval.run_shap:
         res['shap'] = run_anomaly_shap(configs, filter_non_reproducible=configs.eval.filter_non_reproducible)
     if configs.eval.run_moa_classifier:
-        res['moa'] = run_moa_classifier(configs, data_reps = data_reps)
+        res['moa'] = run_moa_classifier(configs)
 
     logger.info("Evaluation pipeline completed.")
 

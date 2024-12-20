@@ -5,36 +5,16 @@ import yaml
 from ads.utils.global_variables import BASE_DIR
 from ads.utils.config_utils import load_configs, set_configs
 from ads.utils.logger import setup_logger
-from ads.pipeline.anomaly_pipeline import anomaly_pipeline
+# from ads.pipeline.anomaly_pipeline import anomaly_pipeline
 from ads.pipeline.eval_pipeline import eval_pipeline
+from ads.data.data_processing import load_data, pre_process, construct_dataloaders
+from ads.pipeline.ProfilingAnomalyDetector import ProfilingAnomalyDetector
+from utils.global_variables import MODALITY_STR
 import os
 import time
 
 sys.path.insert(0, os.path.join(os.getcwd(),'ads'))
 # sys.path.insert(0, currentdir)
-
-
-# # Function to load and merge YAML files
-# def load_config(default_path: str, experiment_path: str) -> dict:
-#     with open(default_path, 'r') as default_file:
-#         default_config = yaml.safe_load(default_file)
-    
-#     with open(experiment_path, 'r') as experiment_file:
-#         experiment_config = yaml.safe_load(experiment_file)
-    
-#     # Merge configs: experiment_config values override default_config
-#     def merge_dicts(default, override):
-#         if not isinstance(override, dict):
-#             return override
-#         result = default.copy()
-#         for key, value in override.items():
-#             if key in result:
-#                 result[key] = merge_dicts(result[key], value)
-#             else:
-#                 result[key] = value
-#         return result
-    
-#     return merge_dicts(default_config, experiment_config)
 
 
 def main(args):
@@ -47,53 +27,46 @@ def main(args):
     configs = set_configs(args)
 
 
-    # setup_logger(configs.general.output_dir)
-    # logger = logging.getLogger(__name__)
-
-    # logger.info(f"Loaded configurations: {configs}")
-
     if configs.general.flow == "train":
-        anomaly_pipeline(configs)
+        anomaly_pipeline2(configs)
     elif configs.general.flow == "eval":
         eval_pipeline(configs)
     else:
 #         logger.error(f"Unknown flow: {configs.general.flow}")
         raise ValueError("Invalid flow provided in configuration.")
 
-# # if __name__ == "__main__":
-#     parser = argparse.ArgumentParser(description="Run anomaly detection pipeline.")
-#     parser.add_argument(
-#         "--config",
-#         type=str,
-#         default="configs/experiment.yaml",
-#         help="Path to the configuration file.",
-#     )
-#     args = parser.parse_args()
-#     main(args.config)
+def anomaly_pipeline2(configs):
+    """
+    Entry point for the anomaly detection pipeline.
+    Args:
+        configs (dict): Configuration dictionary.
+    """
+    # Run the anomaly detection pipeline
+
+    data , __ = load_data(configs.general.base_dir,configs.general.dataset,configs.data.profile_type, modality=configs.data.modality)
+    data_preprocess,features =  pre_process(data,configs)
+    dataloaders = construct_dataloaders(data_preprocess,configs.model.batch_size,features)
+    features, configs.general.logger, 
+    anomaly_detector = ProfilingAnomalyDetector(features,  **vars(configs.model))
+    anomaly_detector.fit(dataloaders['train'])
+    anomaly_detector.forward(dataloaders['test'], configs.general.output_dir)
+
+    save_path = os.path.join(configs.general.output_dir,  f'replicate_level_{MODALITY_STR[configs.data.modality]}_{configs.data.profile_type}_ae_diff')
+    anomaly_detector.preds_to_anomalies(data_preprocess, save_path)
 
 
-    # def set_logger(configs):
-    # """Configure logging."""
-    # general = configs['general']
-    # debug_mode = general.get('debug_mode', False)
-    # res_dir = general['res_dir']
+    # model = train_autoencoder(dataloaders, features, configs)
 
-    # if debug_mode:
-    #     log_file = os.path.join(res_dir, 'debug_log.log')
-    # else:
-    #     log_dir = os.path.join(res_dir, 'logs', general.get('flow', 'default'))
-    #     os.makedirs(log_dir, exist_ok=True)
-    #     log_file = os.path.join(log_dir, f"log_exp_num={general.get('exp_num', 0)}.log")
+    # preds = test_autoencoder(model, dataloaders)
+    # preds = test_autoencoder(model, dataloaders, features, configs)
     
-    # logging.basicConfig(
-    #     filename=log_file,
-    #     filemode='a',
-    #     format='%(asctime)s,%(msecs)d %(name)s %(levelname)s %(message)s',
-    #     datefmt='%H:%M:%S',
-    #     level=logging.INFO,
-    # )
-    # logging.getLogger().addHandler(logging.StreamHandler(sys.stdout))
-    # general['logger'] = logging.getLogger(__name__)
+
+    # __ =post_process_anomaly_and_save(data_preprocess, preds['test_ctrl'],preds['test_treat'], configs.general.output_dir,  f'replicate_level_{MODALITY_STR[configs.data.modality]}_{configs.data.profile_type}_preds', configs, features)
+    # z_preds_normalized = save_treatments(data, z_preds['test_ctrl'],z_preds['test_treat'], configs.general.output_dir,  f'replicate_level_{configs.data.MODALITY_STR[configs.data.modality]}_{configs.data.profile_type}_ae_embeddings', configs, features, embeddings=True)
+    # __ = post_process_anomaly_and_save(data_preprocess, diffs_ctrl,diffs_treat, 
+        # , configs, features)
+            
+        
 
 ################################################################################
 # Main Script

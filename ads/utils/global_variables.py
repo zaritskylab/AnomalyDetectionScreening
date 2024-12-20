@@ -1,4 +1,4 @@
-from eval_layer.eval_utils import get_color_from_palette
+from eval.eval_utils import get_color_from_palette
 
 BASE_DIR = '/sise/assafzar-group/assafzar/genesAndMorph'
 DATA_DIR = f'{BASE_DIR}/preprocessed_data'

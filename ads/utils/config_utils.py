@@ -6,7 +6,7 @@ import numpy as np
 import random
 import logging
 import argparse
-from data_layer.data_utils import get_cp_path, get_cp_dir
+from data.data_utils import get_cp_path, get_cp_dir
 from utils.args import DataArguments, GeneralArguments, ModelArguments, EvalArguments, MoaArguments
 from utils.global_variables import DS_INFO_DICT
 from utils.global_variables import ABRVS

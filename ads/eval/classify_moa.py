@@ -34,7 +34,7 @@ import pickle
 
 
 from utils.global_variables import DS_INFO_DICT, ABRVS
-from data_layer.data_utils import read_paired_treatment_level_profiles
+from data.data_utils import read_paired_treatment_level_profiles
 # from utils.reproduce_funcs import get_median_correlation, get_duplicate_replicates, get_replicates_score
 from utils.file_utils import write_dataframe_to_excel, load_df_pickles_and_concatenate
 

@@ -13,8 +13,8 @@ import os
 
 # from interpret_layer.shap_anomalies import run_anomaly_shap
 from model_layer.AEModel import AutoencoderModel
-from data_layer.data_preprocess import pre_process, construct_dataloaders,normalize
-from data_layer.data_utils import save_profiles, load_data
+from data.data_processing import pre_process, construct_dataloaders,normalize, load_data
+from data.data_utils import save_profiles
 from utils.global_variables import MODALITY_STR
 import os
 from typing import Dict, Union
@@ -54,7 +54,6 @@ def train_autoencoder(dataloaders, features, configs,losses = {}):
     # features = get_features(data, configs.data.modality)
 
     callbacks = set_trainer_callbacks(configs)
-
 
     if configs.model.tune_hyperparams:
         configs.general.logger.info('Tuning hyperparams...')
