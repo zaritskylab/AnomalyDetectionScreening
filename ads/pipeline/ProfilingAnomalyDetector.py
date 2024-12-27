@@ -73,7 +73,7 @@ class ProfilingAnomalyDetector:
         
 
     def fit(self, dataloaders, features):
-        callbacks = self.set_trainer_callbacks(self)
+        callbacks = self.set_trainer_callbacks()
 
         if self.tune_hyperparams:
             self.logger.info('Tuning hyperparams...')
@@ -111,12 +111,12 @@ class ProfilingAnomalyDetector:
         trainer.fit(self.model, dataloaders['train'], dataloaders['val'])
 
 
-    def forward(self, dataloaders, test_dataloaders=['test_ctrl', 'test_treat']):
+    def forward(self, dataloaders, sets=['test_ctrl', 'test_treat']):
         self.model.eval()
         self.preds = {}
         x_recon_preds = {}
 
-        for subset in test_dataloaders:
+        for subset in sets:
             dataloader = dataloaders[subset]
             x_recon_preds[subset] = []
             for batch_idx, batch in enumerate(dataloader):
@@ -124,13 +124,13 @@ class ProfilingAnomalyDetector:
                 x_recon_pred = self.model.predict(batch_device)
                 x_recon_preds[subset].append(x_recon_pred.cpu().detach().numpy())
 
-        for subset in test_dataloaders:
+        for subset in sets:
             self.preds[subset] = np.concatenate(x_recon_preds[subset])
 
         return self.preds
 
 
-    def preds_to_anomalies(self, input_profiles, normalize_reps=True,save_path = None):
+    def save_anomalies(self, input_profiles, normalize_reps=True,save_path = None):
         """
         Processes anomaly representations by:
             - Deducting the outputs from the inputs to get the differences ("anomaly").
@@ -222,7 +222,7 @@ class ProfilingAnomalyDetector:
         # Return the best validation loss as the objective to minimize
         return best_val_loss
 
-    def set_trainer_callbacks():
+    def set_trainer_callbacks(self):
 
         checkpoint_callback = ModelCheckpoint(
             dirpath=self.ckpt_dir,

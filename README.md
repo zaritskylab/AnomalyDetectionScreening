@@ -9,7 +9,11 @@ High-content image-based phenotypic profiling combines automated microscopy and 
 
 ## Downloading data
 
-All augmented per-well aggregated Cell Painting datasets were downloaded from the Cell Painting Gallery (CPG) (https://registry.opendata.aws/cellpainting-gallery/).
+All augmented per-well aggregated Cell Painting datasets were downloaded from the Cell Painting Gallery (CPG) (https://registry.opendata.aws/cellpainting-gallery/). To download the datasets used in the paper, run:
+
+`aws s3 cp --no-sign-request s3://cellpainting-gallery/cpg0003-rosetta/broad/workspace/ <YOUR_PATH>`
+
+For installation of AWS CLI, see https://docs.aws.amazon.com/cli/v1/userguide/install-windows.html.
 
 ## Project setup and run:
 
@@ -54,8 +58,23 @@ All augmented per-well aggregated Cell Painting datasets were downloaded from th
 ## Usage
 
 ```python
-import torch
-from frequency_dropout import FrequencyDropout
+
+from torch.utils.data import DataLoader
+
+
+dataloaders = construct_dataloaders(data,
+                                    batch_size=32
+                                    features)
+
+# Initialize anomaly model
+anomaly_detector = ProfilingAnomalyDetector()
+anomaly_detector.fit(dataloaders, features)
+anomaly_detector.forward(dataloaders, configs.general.output_dir)
+
+save_path = os.path.join(configs.general.output_dir,  f'replicate_level_{MODALITY_STR[configs.data.modality]}_{configs.data.profile_type}_ae_diff')
+anomaly_detector.save_anomalies(data, 
+                                save_path = save_path)
+
 
 # Initialize the layer
 freq_dropout = FrequencyDropout(

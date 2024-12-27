@@ -48,11 +48,11 @@ def anomaly_pipeline2(configs):
     dataloaders = construct_dataloaders(data_preprocess,configs.model.batch_size,features)
     features, configs.general.logger, 
     anomaly_detector = ProfilingAnomalyDetector(features,  **vars(configs.model))
-    anomaly_detector.fit(dataloaders['train'])
-    anomaly_detector.forward(dataloaders['test'], configs.general.output_dir)
+    anomaly_detector.fit(dataloaders, features)
+    anomaly_detector.forward(dataloaders, configs.general.output_dir)
 
     save_path = os.path.join(configs.general.output_dir,  f'replicate_level_{MODALITY_STR[configs.data.modality]}_{configs.data.profile_type}_ae_diff')
-    anomaly_detector.preds_to_anomalies(data_preprocess, save_path)
+    anomaly_detector.save_anomalies(data_preprocess, save_path)
 
 
     # model = train_autoencoder(dataloaders, features, configs)
