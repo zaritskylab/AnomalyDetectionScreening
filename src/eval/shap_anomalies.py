@@ -10,23 +10,30 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 import seaborn as sns
 import matplotlib.style as style
+
+from ProfilingAnomalyDetector import load_checkpoint
 # from scripts.run_ad import test_autoencoder
 from eval.classify_moa import remove_classes_with_few_moa_samples, remove_multi_label_moa
 from eval.calc_reproducibility import calc_percent_replicating
 from utils.config_utils import add_exp_suffix
 from utils.global_variables import DS_INFO_DICT, TOP_MOAS_DICT, NEW_MOAS_DICT
-from pipeline.anomaly_pipeline import load_checkpoint
-from data.data_processing import pre_process, construct_dataloaders, load_data
+# from pipeline.anomaly_pipeline import load_checkpoint
+from data.data_processing import pre_process, construct_dataloaders
+from data.data_utils import load_data
 import logging
 
 
 logging.getLogger('shap').setLevel(logging.WARNING) # turns off the "shap INFO" logs
 
-def run_anomaly_shap(configs, model=None, filter_non_reproducible=True):
+def run_anomaly_shap(configs,
+                     model=None,
+                     filter_non_reproducible=True,
+                     group_by = 'moa', # show shap based compound groups. options: moa, cpd
+                     do_for_each_replicate = False
+                     ):
 
     data , __ = load_data(configs.general.base_dir,configs.general.dataset,configs.data.profile_type, modality=configs.data.modality)
-    data_preprocess,features =  pre_process(data,configs)
-    dataloaders = construct_dataloaders(data_preprocess,configs.model.batch_size,features)
+    data_preprocess,features = pre_process(data,configs)
 
     if model is None:
         model = load_checkpoint(configs.model.ckpt_dir)
@@ -40,7 +47,7 @@ def run_anomaly_shap(configs, model=None, filter_non_reproducible=True):
     
     # if group_by_col =='moa_col':
     cpd_col = DS_INFO_DICT[configs.general.dataset][configs.data.modality]['cpd_col']
-    group_by = 'moa'
+
     # elif group_by == 'cpd':
     if not DS_INFO_DICT[configs.general.dataset]['has_moa']:
         group_by = 'cpd'
@@ -48,8 +55,11 @@ def run_anomaly_shap(configs, model=None, filter_non_reproducible=True):
     
     # set all moa cols with lowercase
     X_test[group_by_col] = X_test[group_by_col].str.lower()
-    X_test_processed, _, _ = remove_classes_with_few_moa_samples(X_test, min_samples = 5)  # remove classes with less than 5 samples
-    X_test_processed, _ = remove_multi_label_moa(X_test_processed)
+    if DS_INFO_DICT[configs.general.dataset]['has_moa']:
+        X_test_processed, _, _ = remove_classes_with_few_moa_samples(X_test, min_samples = 5)  # remove classes with less than 5 samples
+        X_test_processed, _ = remove_multi_label_moa(X_test_processed)
+    else:
+        X_test_processed = X_test.copy()
     X_test_processed = X_test_processed.reset_index(drop=True)
     
     exp_suffix = add_exp_suffix(configs.data.profile_type,configs.eval.by_dose,configs.eval.normalize_by_all)
@@ -85,7 +95,7 @@ def run_anomaly_shap(configs, model=None, filter_non_reproducible=True):
         filter_str = 'all'
     
 
-    if DS_INFO_DICT[configs.general.dataset]['has_moa']:
+    if DS_INFO_DICT[configs.general.dataset]['has_moa'] and group_by=='moa':
         
         # if configs.general.dataset == 'LINCS':
         top_moas = TOP_MOAS_DICT[configs.general.dataset]
@@ -97,74 +107,81 @@ def run_anomaly_shap(configs, model=None, filter_non_reproducible=True):
 
         save_dir = os.path.join(configs.general.res_dir, f'shap_vis_{filter_str}_moa_top')
         os.makedirs(save_dir, exist_ok=True)
-        features_to_run = ['Cells_AreaShape_FormFactor', 'Cells_Texture_DifferenceVariance_RNA_10_0','Cytoplasm_Granularity_4_AGP', 'Nuclei_Granularity_2_DNA',
-       'Cells_Texture_Contrast_ER_10_0',
-       'Cytoplasm_Texture_DifferenceVariance_RNA_10_0',
-       'Cells_Texture_DifferenceEntropy_RNA_10_0',
-       'Cytoplasm_Granularity_3_ER',
-       'Cytoplasm_Texture_DifferenceVariance_ER_5_0',
-       'Cells_Texture_DifferenceVariance_Mito_10_0',
-       'Nuclei_Texture_DifferenceVariance_Mito_10_0',
-       'Cytoplasm_RadialDistribution_MeanFrac_AGP_1of4']
-        exp_model = ExplainAnomaliesUsingSHAP(model,features=features, num_anomalies_to_explain=3, max_features_per_sample=10, reconstruction_error_percent=0.8,features_to_run=features_to_run)
+       #  features_to_run = ['Cells_AreaShape_FormFactor', 'Cells_Texture_DifferenceVariance_RNA_10_0','Cytoplasm_Granularity_4_AGP', 'Nuclei_Granularity_2_DNA',
+       # 'Cells_Texture_Contrast_ER_10_0',
+       # 'Cytoplasm_Texture_DifferenceVariance_RNA_10_0',
+       # 'Cells_Texture_DifferenceEntropy_RNA_10_0',
+       # 'Cytoplasm_Granularity_3_ER',
+       # 'Cytoplasm_Texture_DifferenceVariance_ER_5_0',
+       # 'Cells_Texture_DifferenceVariance_Mito_10_0',
+       # 'Nuclei_Texture_DifferenceVariance_Mito_10_0',
+       # 'Cytoplasm_RadialDistribution_MeanFrac_AGP_1of4']
+
+        print("SHAP explanation for top MoAs: ")
+        explanation_model = ExplainAnomaliesUsingSHAP(model,features=features,
+                                                      num_anomalies_to_explain=3,
+                                                      max_features_per_sample=10,
+                                                      reconstruction_error_percent=0.8,
+                                                      )
+                                                      # features_to_run=features_to_run)
         
         
         # logging.getLogger('matplotlib').setLevel(logging.WARNING)
-        all_sets_explaining_features = exp_model.explain_unsupervised_data(x_train=X_control, 
+        all_sets_explaining_features = explanation_model.explain_unsupervised_data(x_train=X_control,
                                                                     x_explain=only_top_moa_data,
-                                                                    autoencoder=model,
-                                                                    return_shap_values=True,
+                                                                    # model=model,
+                                                                    # return_shap_values=True,
                                                                     group_by=group_by_col,
                                                                     save_dir=save_dir)
-        
-        new_moas = NEW_MOAS_DICT[configs.general.dataset]
-        only_new_moa_data = X_test[X_test[group_by_col].isin(new_moas)]
-        only_new_moa_data = only_new_moa_data.reset_index(drop=True)
+
+
+        # new_moas = NEW_MOAS_DICT[configs.general.dataset]
+        # only_new_moa_data = X_test[X_test[group_by_col].isin(new_moas)]
+        # only_new_moa_data = only_new_moa_data.reset_index(drop=True)
         save_dir = os.path.join(configs.general.res_dir, f'shap_vis_{filter_str}_moa_new')
         os.makedirs(save_dir, exist_ok=True)
 
-        exp_model = ExplainAnomaliesUsingSHAP(model,features=features, num_anomalies_to_explain=2, max_features_per_sample=5)
-        all_sets_explaining_features = exp_model.explain_unsupervised_data(x_train=X_control, 
+        explanation_model = ExplainAnomaliesUsingSHAP(model,features=features, num_anomalies_to_explain=2, max_features_per_sample=5)
+        all_sets_explaining_features = explanation_model.explain_unsupervised_data(x_train=X_control,
                                                                     x_explain=only_new_moa_data,
-                                                                    autoencoder=model,
-                                                                    return_shap_values=True,
+                                                                    # autoencoder=model,
+                                                                    # return_shap_values=True,
                                                                     group_by=group_by_col,
                                                                     save_dir=save_dir)
     
     # run shap by compounds
-    group_by = 'cpd'
-    group_by_col = DS_INFO_DICT[configs.general.dataset][configs.data.modality][f'{group_by}_col']
-    save_dir = os.path.join(configs.general.res_dir, f'shap_vis_{filter_str}_cpd')
-    os.makedirs(save_dir, exist_ok=True)
+    else:
+        group_by = 'cpd'
+    # group_by = 'cpd'
+        group_by_col = DS_INFO_DICT[configs.general.dataset][configs.data.modality][f'{group_by}_col']
+        save_dir = os.path.join(configs.general.res_dir, f'shap_vis_{filter_str}_cpd')
+        os.makedirs(save_dir, exist_ok=True)
 
-    # x_explain = only_top_moa_data.copy()
-    exp_model = ExplainAnomaliesUsingSHAP(model,features=features, num_anomalies_to_explain=3, max_features_per_sample=5)
-    all_sets_explaining_features = exp_model.explain_unsupervised_data(x_train=X_control, 
-                                                                x_explain=X_test,
-                                                                autoencoder=model,
-                                                                return_shap_values=True,
-                                                                group_by=group_by_col,
-                                                                save_dir=save_dir)
-    
-    # run shap by replicates
-    save_dir = os.path.join(configs.general.res_dir, f'shap_vis_{filter_str}_replicates')
-    os.makedirs(save_dir, exist_ok=True)
+        print("SHAP explanation for top 3 compounds: ")
+        # do explantation for replicates of the same compound
+        explanation_model = ExplainAnomaliesUsingSHAP(model,features=features, num_anomalies_to_explain=3, max_features_per_sample=5)
+        all_sets_explaining_features = explanation_model.explain_unsupervised_data(x_train=X_control,
+                                                                    x_explain=X_test,
+                                                                    # autoencoder=model,
+                                                                    # return_shap_values=True,
+                                                                    group_by=group_by_col,
+                                                                    save_dir=save_dir)
 
-    # x_explain = only_top_moa_data.copy()
-    exp_model = ExplainAnomaliesUsingSHAP(model,features=features, num_anomalies_to_explain=3, max_features_per_sample=5)
-    all_sets_explaining_features = exp_model.explain_unsupervised_data(x_train=X_control, 
-                                                                x_explain=X_test,
-                                                                autoencoder=model,
-                                                                return_shap_values=True,
-                                                                # group_by=group_by_col,
-                                                                save_dir=save_dir)
-    
+        # run shap by replicates
+        save_dir = os.path.join(configs.general.res_dir, f'shap_vis_{filter_str}_replicates')
+        os.makedirs(save_dir, exist_ok=True)
 
 
+        if do_for_each_replicate:
+            explanation_model = ExplainAnomaliesUsingSHAP(model,features=features, num_anomalies_to_explain=3, max_features_per_sample=5)
+            all_sets_explaining_features = explanation_model.explain_unsupervised_data(x_train=X_control,
+                                                                        x_explain=X_test,
+                                                                        # autoencoder=model,
+                                                                        # return_shap_values=True,
+                                                                        save_dir=save_dir)
 
 
-
-#### from https://github.com/ronniemi/explainAnomaliesUsingSHAP/blob/master/ExplainAnomaliesUsingSHAP.py 
+#### adapted from https://github.com/ronniemi/explainAnomaliesUsingSHAP/blob/master/ExplainAnomaliesUsingSHAP.py
 class ExplainAnomaliesUsingSHAP:
     '''
     This class implements method described in 'Explaining Anomalies Detected by Autoencoders Using SHAP' to explain
@@ -202,43 +219,6 @@ class ExplainAnomaliesUsingSHAP:
         self.max_features_per_sample = max_features_per_sample
         self.features_to_run = features_to_run
 
-    # def train_model(self, x_train, nb_epoch=1000, batch_size=64):
-    #     """
-    #     Train 6-layer Autoencoder model on the given x_train data.
-
-    #     Args:
-    #         x_train (data frame): The data to train the Autoencoder model on
-    #         nb_epoch (int): Number of epoch the model will perform
-    #         batch_size (int): Size of each batch of data enter to the model
-
-    #     Returns:
-    #         model: Trained autoencoder
-    #     """
-        
-    #     input_dim = x_train.shape[1]
-
-    #     input_layer = Input(shape=(input_dim,))
-
-    #     encoder = Dense(int(input_dim / 2), activation="relu", activity_regularizer=regularizers.l1(10e-7))(
-    #         input_layer)
-
-    #     encoder = Dense(int(input_dim / 4), activation="relu", kernel_regularizer=regularizers.l2(10e-7))(encoder)
-
-    #     decoder = Dense(int(input_dim / 2), activation='relu', kernel_regularizer=regularizers.l2(10e-7))(encoder)
-
-    #     decoder = Dense(input_dim, activation='sigmoid', kernel_regularizer=regularizers.l2(10e-7))(decoder)
-
-    #     self.autoencoder = Model(inputs=input_layer, outputs=decoder)
-
-    #     self.autoencoder.summary()
-
-    #     self.autoencoder.compile(optimizer='adam', loss='mean_squared_error', metrics=['mse'])
-
-    #     earlystopper = EarlyStopping(monitor='val_loss', patience=5, verbose=1)
-    #     self.autoencoder.fit(x_train, x_train, epochs=nb_epoch, batch_size=batch_size, shuffle=True,
-    #                          validation_split=0.1, verbose=2, callbacks=[earlystopper])
-
-    #     return self.autoencoder
 
     def get_top_anomaly_to_explain(self, x_explain, group_by=None, x_train=None):
         """
@@ -461,7 +441,12 @@ class ExplainAnomaliesUsingSHAP:
 
         return record_prediction
 
-    def explain_unsupervised_data(self, x_train, x_explain, autoencoder=None, return_shap_values=False,save_dir=None,group_by=None,scale=True):
+    def explain_unsupervised_data(self, x_train,
+                                  x_explain,
+                                  background_set_size = 200,
+                                  save_dir=None,
+                                  group_by=None,
+                                  process_x_train_to_errors=True):
         """
         First, if Autoencoder model not provided ('autoencoder' is None) train Autoencoder model on given x_train data.
         Then, for each record in 'top_records_to_explain' selected from given 'x_explain' as described in
@@ -480,35 +465,19 @@ class ExplainAnomaliesUsingSHAP:
                                   SHAP explanation process)
             x_explain (data frame): The data from which the top 'num_anomalies_to_explain' records are selected by their
                                     MSE to be explained.
-            autoencoder (model): Trained Autoencoder model that will be used to explain x_explain data. If None (model 
-                                 not provided) then we will build and train from scratch a Autoencoder model as described 
-                                 in train_model function.
-            return_shap_values (bool): If False, the resulting explnation featues set for each record will include only 
-                                       the names of the explaining features. If True, in addition to explaining feature name,
-                                       the explnation featues set will include the SHAP value of each feature in the explnation
-                                       featues set so the explnation featues set will be composed of tupels of (str, float)
-                                       when str will be the name of the explaining feature and float will be its SHAP value.
-                                       Note that for the explained features (features with high reconstraction error), if they 
-                                       did not appear in previuse feature explanation (explnation of feature with higher 
-                                       recustraction error), they will not have any SHAP values. Therefore they get unique
-                                       value of -1.
+            save_dir: output directory for figures
+            group_by (str): field to group data according to
+            process_x_train_to_errors (bool): If true, computes autoencoder errors for data from x_train.
                                        
         Returns:
             dict: Return all_sets_explaining_features dictionary that contain the explanation for
                   'top_records_to_explain' records so that the keys are int; the records indexes and the values are
                   lists; the explanation features sets.
         """
-        # if self.features is not None:
-            # x_train_with_metadata = x_train.copy()
-            # x_explain_with_metadata = x_explain.copy()
-            # x_train = x_train[self.features]
-            # x_explain = x_explain[self.features]
 
-        # self.autoencoder = autoencoder
-        # if self.autoencoder is None:
-            # self.train_model(x_train)   
-        if scale:
-            
+        if process_x_train_to_errors:
+
+            print("Processing x_train data for shap anomalies...")
             scaler_diffs = preprocessing.StandardScaler()
             x_train_tensor = torch.tensor(x_train[self.features].values, dtype=torch.float32).to(self.autoencoder.device)
             x_train_preds = self.autoencoder.predict(x_train_tensor).detach().cpu().numpy()
@@ -520,6 +489,7 @@ class ExplainAnomaliesUsingSHAP:
 
         top_records_to_explain = self.get_top_anomaly_to_explain(x_explain, group_by=group_by,x_train=x_train)
         # top_records_to_explain = self.get_top_anomaly_to_explain(x_explain, group_by=group_by)
+        print(f"top anomalies to explain are: {top_records_to_explain}")
 
         if group_by is None:
             x_explain_top_records = x_explain.loc[top_records_to_explain]
@@ -548,22 +518,21 @@ class ExplainAnomaliesUsingSHAP:
             all_sets_explaining_features[record_idx] = []
             shap_values_all_features = {}
 
-            backgroungd_set = self.get_background_set(x_train[self.features], 400).values
-            backgroungd_set = self.get_background_set(x_train[self.features], 200).values
-            # backgroungd_set = shap.kmeans(backgroungd_set, 10)
+            background_set = self.get_background_set(x_train[self.features], background_set_size).values
+
             for i in range(num_of_features):
 
                 self.counter = df_top_err.index[i]
                 feature_name = df_top_err.values[i][0]
                 error = df_top_err.values[i][1]
-                explainer = shap.KernelExplainer(self.func_predict_feature, backgroungd_set)
+                explainer = shap.KernelExplainer(self.func_predict_feature, background_set)
                 shap_values = explainer.shap_values(record_to_explain[self.features], nsamples='auto')
                 # if len(shap_values.shape) == 1:
                     # shap_values = np.reshape(shap_values, (1,len(shap_values)))
 
                 if save_dir is not None:
                     if group_by is not None:
-                            
+
                         shap.summary_plot(shap_values,
                                           plot_type = 'dot', 
                                           feature_names=self.features, 
@@ -572,10 +541,10 @@ class ExplainAnomaliesUsingSHAP:
                                           plot_size=(6,2.5))  #max_display=10,
                         
                         # plt.gca().set_xticklabels(plt.gca().get_xticklabels(), rotation=80, ha='right')
-                        plt.gca().set_yticklabels(plt.gca().get_yticklabels(),fontsize=12)
+                        # plt.gca().set_yticklabels(plt.gca().get_yticklabels(),fontsize=12)
                         plt.gca().set_xlabel('SHAP Values', fontsize=12)
                         # plt.gca().set_ylabel('Top features', fontsize=12)
-                        # plt.gca().set_title(feature_name, fontsize=12)
+                        plt.gca().set_title(feature_name, fontsize=12)
 
                         # ax.set_xticklabels(ax.get_xticklabels(), rotation=80, ha='right')
                         save_path = os.path.join(save_dir,f'shap_summary_plot_{j}_{record_idx}_{i}_{feature_name}.png')
@@ -583,7 +552,6 @@ class ExplainAnomaliesUsingSHAP:
                         
                         # plt.title(feature_name)
                         plt.tight_layout()
-                        plt.show()
                         plt.savefig(save_path)
                         plt.close('all')
                     else:
@@ -592,14 +560,12 @@ class ExplainAnomaliesUsingSHAP:
                                                                feature_names=self.features,
                                                                max_display=5)
 
-
                         save_path = os.path.join(save_dir,f'shap_waterfall_plot_{j}_{record_idx}_{cpd_name}_{i}_{feature_name}.png')
-                        plt.gca().set_yticklabels(plt.gca().get_yticklabels(), rotation=10,fontsize=8, ha='right')
+                        # plt.gca().set_yticklabels(plt.gca().get_yticklabels(), rotation=10,fontsize=8, ha='right')
                         plt.gca().set_xlabel('SHAP Values', fontsize=12)
                         plt.gca().set_ylabel('Top features', fontsize=12)
-                        # plt.title(feature_name)
+
                         plt.tight_layout()
-                        plt.show()
                         plt.savefig(save_path)
                         plt.close('all')
                 shap_values_all_features[feature_name] = {
@@ -609,30 +575,5 @@ class ExplainAnomaliesUsingSHAP:
 
             # shap_values_all_features = np.fabs(shap_values_all_features)
             shap_values_all_records[record_idx] = shap_values_all_features
-
-            # shap_values_all_features = pd.DataFrame(data=shap_values_all_features, columns=self.features)
-            # highest_contributing_features = self.get_highest_shap_values(shap_values_all_features)
-            
-            # for idx_explained_feature in range(num_of_features):
-            #     set_explaining_features =[]
-            #     for idx, row in highest_contributing_features.iterrows():
-            #         if idx[0] == idx_explained_feature:
-            #             set_explaining_features.append((idx[1], row[0]))
-            #     explained_feature_index = df_top_err.index[idx_explained_feature]
-            #     set_explaining_features.insert(0, (x_train.columns[explained_feature_index], -1))
-
-            #     all_sets_explaining_features[record_idx].append(set_explaining_features)
-
-            # final_set_features = []
-            # final_set_items = []
-            # for item in sum(all_sets_explaining_features[record_idx], []):
-            #     if item[0] not in final_set_features:
-            #         final_set_features.append(item[0])
-            #         final_set_items.append(item)
-                    
-            # if return_shap_values:
-            #     all_sets_explaining_features[record_idx] = final_set_items
-            # else:
-            #     all_sets_explaining_features[record_idx] = final_set_features
 
         return shap_values_all_records

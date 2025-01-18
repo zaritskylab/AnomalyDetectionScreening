@@ -1,7 +1,7 @@
 import optuna
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
-from ads.model_layer.AEModel import AutoencoderModel
+from src.model.AEModel import AutoencoderModel
 
 def tune_hyperparams(dataloaders, features, configs):
 

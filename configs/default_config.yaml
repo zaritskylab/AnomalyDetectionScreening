@@ -6,37 +6,11 @@ GeneralArguments:
   debug_mode: false
   seed: 42
   gpus: 1
-  base_dir: "BASE_DIR"
+  base_dir: "/Users/alonshp/rosetta-data"
   overwrite_experiment: false
   run_parallel: false
   slice_id: null
   run_all_datasets: false
-
-  # tune_ldims:
-  #   default: false
-  #   description: "Whether to tune latent dimensions."
-  # dataset:
-  #   default: "CDRP-bio"
-  #   description: "Dataset name."
-  # run_both_profiles:
-  #   default: false
-  #   description: "Run both profiles if true."
-  # exp_num:
-  #   default: 0
-  #   description: "Experiment number."
-  # run_all_datasets:
-  #   default: false
-  #   description: "Run all datasets if true."
-  # overwrite_experiment:
-  #   default: false
-  #   description: "Overwrite existing results if true."
-
-  # run_parallel:
-  #   default: false
-  #   description: "Run datasets on different GPUs if true."
-  # slice_id:
-  #   default: null
-  #   description: "Slice ID for batch runs."
 
 DataArguments:
   use_cache: true # "Use cache if true."
@@ -72,45 +46,6 @@ ModelArguments:
   encoder_type: "default" # "Encoder type (default, shallow, deep)."
   max_epochs_in_trial: 100 # "Maximum epochs per trial."
 
-  # l2_lambda:
-  #   default: 0.007
-  #   description: "L2 regularization lambda."
-  # tune_l2:
-  #   default: true
-  #   description: "Tune L2 regularization as part of hyperparameter tuning."
-  # l1_latent_lambda:
-  #   default: 0
-  #   description: "L1 regularization lambda for latent dimension."
-  # tune_l1:
-  #   default: false
-  #   description: "Tune L1 regularization as part of hyperparameter tuning."
-  # batch_size:
-  #   default: 32
-  #   description: "Batch size."
-  # max_epochs:
-  #   default: 500
-  #   description: "Maximum number of epochs."
-  # use_16bit:
-  #   default: false
-  #   description: "Use 16-bit precision for training."
-  # save_top_k:
-  #   default: 1
-  #   description: "Save top K checkpoints."
-  # tune_hyperparams:
-  #   default: false
-  #   description: "Tune hyperparameters."
-  # n_tuning_trials:
-  #   default: 150
-  #   description: "Number of tuning trials."
-  # deep_decoder:
-  #   default: false
-  #   description: "Use deep decoder if true."
-  # encoder_type:
-  #   default: "default"
-  #   description: "Encoder type (default, shallow, deep)."
-  # max_epochs_in_trial:
-  #   default: 100
-  #   description: "Maximum epochs per trial."
 
 EvalArguments:
   with_l1k: true # "Calculate L1K metrics."
@@ -129,51 +64,6 @@ EvalArguments:
   filter_non_reproducible: true # "Filter non-reproducible compounds for SHAP evaluation."
   run_shap: true # "Run SHAP evaluation."
 
-  # num_simulations:
-  #   default: 1000
-  #   description: "Number of simulations."
-  # do_baseline:
-  #   default: true
-  #   description: "Run baseline evaluation."
-  # do_original:
-  #   default: false
-  #   description: "Run original evaluation."
-  # by_dose:
-  #   default: false
-  #   description: "Run by dose."
-  # z_trim:
-  #   default: null
-  #   description: "Z-score threshold for trimming."
-  # normalize_by_all:
-  #   default: true
-  #   description: "Normalize using all data including treatment."
-  # run_dose_if_exists:
-  #   default: false
-  #   description: "Run dose if exists."
-  # filter_by_highest_dose:
-  #   default: true
-  #   description: "Run only highest dose."
-  # calc_l1k:
-  #   default: true
-  #   description: "Calculate L1K metrics."
-  # latent_exp:
-  #   default: false
-  #   description: "Run latent dimension experiment."
-  # load_corr_if_exists:
-  #   default: true
-  #   description: "Load correlation if exists."
-  # min_max_norm:
-  #   default: false
-  #   description: "Apply Min-Max normalization."
-  # rand_reps:
-  #   default: 5
-  #   description: "Number of random sampling repetitions."
-  # filter_non_reproducible:
-  #   default: true
-  #   description: "Filter non-reproducible compounds for SHAP evaluation."
-  # run_shap:
-  #   default: true
-  #   description: "Run SHAP evaluation."
 
 MoaArguments:
   tune: false # "Tune hyperparameters."
@@ -189,44 +79,4 @@ MoaArguments:
   moa_dirname: "MoAprediction" # "MOA directory name."
   with_l1k: true # "Run L1K analysis."
   moa_plate_normalized: true # "Normalize by plate in MOA analysis."
-  with_l1k: true # "Run L1K analysis."
-  
-  # tune:
-  #   default: false
-  #   description: "Tune hyperparameters."
-  # tune_first_fold:
-  #   default: false
-  #   description: "Tune only for the first fold."
-  # filter_perts:
-  #   default: "HighRepUnion"
-  #   description: "Filter perturbations (e.g., HighRepUnion, onlyCP)."
-  # n_exps:
-  #   default: 1
-  #   description: "Number of experiments."
-  # do_fusion:
-  #   default: true
-  #   description: "Run fusion if true."
-  # folds:
-  #   default: 10
-  #   description: "Number of folds for cross-validation."
-  # min_samples:
-  #   default: 4
-  #   description: "Minimum samples per perturbation."
-  # exp_seed:
-  #   default: 42
-  #   description: "Experiment seed."
-  # rep_corr_fileName:
-  #   default: "RepCorrDF"
-  #   description: "Replicate correlation file name."
-  # do_all_filter_groups:
-  #   default: false
-  #   description: "Run all filter groups."
-  # moa_dirname:
-  #   default: "MoAprediction"
-  #   description: "MOA directory name."
-  # run_l1k:
-  #   default: true
-  #   description: "Run L1K analysis."
-  # moa_plate_normalized:
-  #   default: true
-  #   description: "Normalize by plate in MOA analysis."
+

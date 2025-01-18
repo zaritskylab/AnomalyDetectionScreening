@@ -1,19 +1,16 @@
 import argparse
-import sys
-import logging
-import yaml
-from ads.utils.global_variables import BASE_DIR
-from ads.utils.config_utils import load_configs, set_configs
-from ads.utils.logger import setup_logger
-# from ads.pipeline.anomaly_pipeline import anomaly_pipeline
-from ads.pipeline.eval_pipeline import eval_pipeline
-from ads.data.data_processing import load_data, pre_process, construct_dataloaders
-from ads.pipeline.ProfilingAnomalyDetector import ProfilingAnomalyDetector
+from src.utils.global_variables import BASE_DIR, DS_INFO_DICT
+from src.utils.config_utils import set_configs
+from src.data.data_processing import pre_process, construct_dataloaders
+from data.data_utils import load_data
+from ProfilingAnomalyDetector import ProfilingAnomalyDetector
+from eval.calc_reproducibility import calc_percent_replicating
+from eval.classify_moa import run_moa_classifier
+from eval.shap_anomalies import run_anomaly_shap
 from utils.global_variables import MODALITY_STR
-import os
-import time
 
-sys.path.insert(0, os.path.join(os.getcwd(),'ads'))
+
+# sys.path.insert(0, os.path.join(os.getcwd(),'src'))
 # sys.path.insert(0, currentdir)
 
 
@@ -28,14 +25,14 @@ def main(args):
 
 
     if configs.general.flow == "train":
-        anomaly_pipeline2(configs)
+        anomaly_pipeline(configs)
     elif configs.general.flow == "eval":
         eval_pipeline(configs)
     else:
 #         logger.error(f"Unknown flow: {configs.general.flow}")
         raise ValueError("Invalid flow provided in configuration.")
 
-def anomaly_pipeline2(configs):
+def anomaly_pipeline(configs):
     """
     Entry point for the anomaly detection pipeline.
     Args:
@@ -44,40 +41,40 @@ def anomaly_pipeline2(configs):
     # Run the anomaly detection pipeline
 
     data , __ = load_data(configs.general.base_dir,configs.general.dataset,configs.data.profile_type, modality=configs.data.modality)
-    data_preprocess,features =  pre_process(data,configs)
+    data_preprocess,features = pre_process(data,configs)
     dataloaders = construct_dataloaders(data_preprocess,configs.model.batch_size,features)
-    features, configs.general.logger, 
+
     anomaly_detector = ProfilingAnomalyDetector(features,  **vars(configs.model))
     anomaly_detector.fit(dataloaders, features)
-    anomaly_detector.forward(dataloaders, configs.general.output_dir)
+    anomaly_detector.forward(dataloaders)
 
-    save_path = os.path.join(configs.general.output_dir,  f'replicate_level_{MODALITY_STR[configs.data.modality]}_{configs.data.profile_type}_ae_diff')
-    anomaly_detector.save_anomalies(data_preprocess, save_path)
+    # save_path = os.path.join(configs.,  )
+    filename = f'replicate_level_{MODALITY_STR[configs.data.modality]}_{configs.data.profile_type}_ae_diff'
+    anomaly_detector.save_anomalies(data_preprocess,save_dir=configs.general.output_dir, filename=filename)
 
 
-    # model = train_autoencoder(dataloaders, features, configs)
+def eval_pipeline(configs):
+    """
+    Entry point for the evaluation pipeline.
+    Args:
+        configs (dict): Configuration dictionary.
+    """
 
-    # preds = test_autoencoder(model, dataloaders)
-    # preds = test_autoencoder(model, dataloaders, features, configs)
-    
+    res = {}
+    res['rc'] = calc_percent_replicating(configs)
 
-    # __ =post_process_anomaly_and_save(data_preprocess, preds['test_ctrl'],preds['test_treat'], configs.general.output_dir,  f'replicate_level_{MODALITY_STR[configs.data.modality]}_{configs.data.profile_type}_preds', configs, features)
-    # z_preds_normalized = save_treatments(data, z_preds['test_ctrl'],z_preds['test_treat'], configs.general.output_dir,  f'replicate_level_{configs.data.MODALITY_STR[configs.data.modality]}_{configs.data.profile_type}_ae_embeddings', configs, features, embeddings=True)
-    # __ = post_process_anomaly_and_save(data_preprocess, diffs_ctrl,diffs_treat, 
-        # , configs, features)
-            
-        
+    if configs.eval.run_shap:
+        res['shap'] = run_anomaly_shap(configs, filter_non_reproducible=configs.eval.filter_non_reproducible)
+    if configs.eval.run_moa_classifier and DS_INFO_DICT[configs.general.dataset]['has_moa']:
+        res['moa'] = run_moa_classifier(configs)
 
-################################################################################
-# Main Script
-################################################################################
 
 # Function to parse command-line arguments
 def parse_args():
     parser = argparse.ArgumentParser(description="Run profiling anomaly detection pipeline")
     
     # Add arguments corresponding to dataclass fields
-    parser.add_argument("--base_dir", type=str, default=BASE_DIR, help="Base directory for the project")
+    parser.add_argument("--base_dir", type=str, help="Base directory for the project")
     parser.add_argument("--exp_name", type=str, help="Experiment name")
     parser.add_argument("--config", type=str, default = 'configs/default_config.yaml',help="Path to the configuration file")
     parser.add_argument("--flow", type=str, default = 'train',help="Flow of the experiment")

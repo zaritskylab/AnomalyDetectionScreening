@@ -120,6 +120,7 @@ class EvalArguments:
     rand_reps: Optional[int] = field(default=3, metadata={"help": "Number of sampling for random correlations"})
     filter_non_reproducible: Optional[bool] = field(default=True, metadata={"help": "if True, filter non-reproducible compounds for SHAP evaluation"})
     run_shap: Optional[bool] = field(default=True, metadata={"help": "if True, run SHAP evaluation"})
+    run_moa_classifier: Optional[bool] = field(default=True, metadata={"help": "if True, run moa classification"})
 
 
 @dataclass

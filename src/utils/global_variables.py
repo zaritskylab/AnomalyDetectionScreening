@@ -1,6 +1,7 @@
 from eval.eval_utils import get_color_from_palette
 
 BASE_DIR = '/sise/assafzar-group/assafzar/genesAndMorph'
+BASE_DIR = '/Users/alonshp/rosetta-data'
 DATA_DIR = f'{BASE_DIR}/preprocessed_data'
 PROCESSED_DATA_DIR = f'{BASE_DIR}/anomaly_output'
 RESULTS_DIR = f'{BASE_DIR}/results'

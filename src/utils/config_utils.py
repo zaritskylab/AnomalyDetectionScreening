@@ -41,11 +41,15 @@ def merge_cli_and_config(cli_args: dict, config: dict) -> None:
         for key, value in cli_args.items():
             if value is not None:  # Override only if CLI argument is provided
                 keys = key.split('.')  # Support nested keys if needed
-                temp = config[config_key]            
-                for k in keys[:-1]:
-                    temp = temp.get(k, {})
-                if keys[-1] in temp:
-                    temp[keys[-1]] = value
+
+                if config_key in config:
+                    temp = config[config_key]
+                    for k in keys[:-1]:
+                        temp = temp.get(k, {})
+                    if keys[-1] in temp:
+                        temp[keys[-1]] = value
+                else:
+                    config[config_key] = {}
 
     # Instantiate dataclasses with merged config
     general_args = GeneralArguments(**config['GeneralArguments'])

@@ -5,18 +5,12 @@ from sklearn import preprocessing
 from sklearn.metrics import pairwise_distances
 from pycytominer.cyto_utils import output
 import pickle
-#'dataset_name',['folder_name',[cp_pert_col_name,l1k_pert_col_name],[cp_control_val,l1k_control_val]]
-# from utils.eval_utils import filter_data_by_highest_dose
+
 from utils.global_variables import DS_INFO_DICT
 
 
-# adapted from https://github.com/carpenter-singh-lab/2022_Haghighi_NatureMethods/blob/main/utils/readProfiles.py 
-
-
+# adapted from https://github.com/carpenter-singh-lab/2022_Haghighi_NatureMethods/blob/main/utils/readProfiles.py
 labelCol='PERT'
-
-
-
 
 ################################################################################
 
@@ -143,12 +137,9 @@ def get_cp_path(dataset_rootDir,dataset,profileType,exp_name = '',processed=Fals
 ################################################################################
 def save_profiles(df, dataset_rootDir, filename, float_format = "%.5g", compression={"method": "gzip", "mtime": 1}, output_type='.csv',exp_name='', modality='CellPainting'):
 
-
-    cp_path = os.path.join(dataset_rootDir,filename+output_type)
-
     output(
             df=df,
-            output_filename=cp_path,
+            output_filename=os.path.join(dataset_rootDir,filename+output_type),
             compression_options=compression,
             float_format=float_format,
         )
@@ -673,3 +664,21 @@ def standardize_per_catX(df,column_name,cp_features):
     .transform(lambda x: (x - x.mean()) / x.std()).values
     return df_scaled_perPlate
 
+
+def load_data(base_dir,dataset, profile_type,whole_plate_normalization = False, modality = 'CellPainting'):
+  '''
+  Load data from the given dataset and profile type
+
+  Args:
+  base_dir: string. path to the data directory
+  dataset: string. options: ['CDRP','CDRP-bio','TAORF','LUAD','LINCS']
+  profile_type: string. options: ['normalized','augmented','normalized_variable_selected']
+  whole_plate_normalization: boolean. normalize plate-wise by all samples in the plate
+  modality: string. options: ['CellPainting']. 'L1000' is not supported yet
+
+  '''
+
+  [data, cp_features] = read_replicate_single_modality_level_profiles(base_dir, dataset, profile_type ,per_plate_normalized_flag=whole_plate_normalization, modality=modality)
+  features, meta_features = get_features(data, modality)
+
+  return data, features

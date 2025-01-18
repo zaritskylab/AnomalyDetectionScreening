@@ -13,7 +13,7 @@ currentdir = '/sise/home/alonshp/AnomalyDetectionScreening'
 from utils.config_utils import set_configs, add_exp_suffix
 from utils.file_utils import write_dataframe_to_excel
 
-from utils.global_variables import DS_INFO_DICT, METHOD_NAME_MAPPING, MODALITY_STR
+from utils.global_variables import DS_INFO_DICT, METHOD_NAME_MAPPING, MODALITY_STR, BASE_DIR
 from data.data_utils import load_zscores, get_cp_dir
 from eval.eval_utils import run_pr_plot, compute_venn2_subsets
 
@@ -31,22 +31,21 @@ def calc_percent_replicating(configs,data_reps = ['ae_diff','baseline']):
         fig_dir: Directory to save figures.
         methods: Dictionary containing method details.
         best_comp_method: Best comparison method.
-        exp_save_dir: Directory to save experiment results.
+        res_dir: Directory to save experiment results.
         shared_cpds_with_baseline: Shared compounds with baseline.
 
     Returns:
         Dictionary containing results of percent replicating for each method.
     """
 
-    base_dir= '/sise/assafzar-group/assafzar/genesAndMorph'
     # data_dir = get_cp_dir(configs)
-    data_dir =  get_cp_dir(base_dir,configs.general.dataset,configs.data.profile_type)
+    base_dir = configs.general.base_dir
+    output_dir = configs.general.output_dir
+    res_dir = configs.general.res_dir
+
+    data_dir = get_cp_dir(base_dir,configs.general.dataset,configs.data.profile_type)
     # l1k_data_dir = get_cp_dir(base_dir,configs.general.dataset,configs.data.profile_type,modality='L1000')
     # exp_name= 'ae_12_09_fs'
-    
-
-    output_dir = configs.general.output_dir
-    exp_save_dir = configs.general.res_dir
 
     debug_mode = configs.general.debug_mode
     l1k_data_dir = os.path.dirname(data_dir) + '/L1000'
@@ -70,7 +69,7 @@ def calc_percent_replicating(configs,data_reps = ['ae_diff','baseline']):
         if configs.eval.with_l1k:
             methods['l1k'] = {'name':'L1000','path': os.path.join(l1k_data_dir,f'replicate_level_l1k_{p}.csv.gz')}
 
-        os.makedirs(exp_save_dir,exist_ok=True)
+        os.makedirs(res_dir,exist_ok=True)
         configs.general.logger.info(f'loading from path {output_dir}')
 
         methods = load_zscores(methods,base_dir,configs.general.dataset,p,by_dose=configs.eval.by_dose,normalize_by_all =configs.eval.normalize_by_all,z_trim=configs.eval.z_trim,set_index=False,debug_mode=debug_mode,min_max_norm=configs.eval.min_max_norm, filter_by_highest_dose=configs.eval.filter_by_highest_dose)
@@ -84,7 +83,7 @@ def calc_percent_replicating(configs,data_reps = ['ae_diff','baseline']):
             cpd_col = 'cpd_col'
 
         ################ run rep correlation measurements ####################
-        corr_path = f'{exp_save_dir}/RepCorrDF.xlsx'
+        corr_path = f'{res_dir}/RepCorrDF.xlsx'
 
         methods = calc_replicate_corrs(methods,configs.general.dataset,cpd_col,exp_suffix,corr_path,debug_mode,rand_reps=configs.eval.rand_reps,overwrite_experiment=configs.general.overwrite_experiment)
         for m in methods.keys():
@@ -103,7 +102,7 @@ def calc_percent_replicating(configs,data_reps = ['ae_diff','baseline']):
             compiting_methods = [m for m in comp_methods if m in methods.keys()]
 
             best_comp_method = max(compiting_methods, key=lambda key: methods[key]['percent_replicating'])
-            methods_to_compare = [data_reps[0], ]
+            methods_to_compare = [data_reps[0],best_comp_method]
             configs.general.logger.info(f'best method: {best_comp_method} with {methods[best_comp_method]["percent_replicating"]}% replicating')
 
             ####################### plot venn diageram of shared cpds of two methods #########################   
@@ -141,7 +140,7 @@ def calc_percent_replicating(configs,data_reps = ['ae_diff','baseline']):
             df_reproduce['reproducible_cl'] = df_reproduce['reproducible_l1k'] | df_reproduce['reproducible_raw']
             df_reproduce['reproducible_acl'] = df_reproduce['reproducible_cl'] | df_reproduce['reproducible_anomaly']
             
-        df_reproduce.to_csv(f'{exp_save_dir}/reproducible_cpds{exp_suffix}.csv',index=False)
+        df_reproduce.to_csv(f'{res_dir}/reproducible_cpds{exp_suffix}.csv',index=False)
                 
         configs.general.logger.info('completed running RC successfully!')
 

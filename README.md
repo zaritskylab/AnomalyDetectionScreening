@@ -22,12 +22,31 @@ For installation of AWS CLI, see https://docs.aws.amazon.com/cli/v1/userguide/in
 3. Create a conda environment: `conda create -n pytorch_anomaly python=3.10.9`
 4. Activate the conda environment `conda activate pytorch_anomaly`
 5. Install the required packages: `pip install -r requirements.txt`
-5. Run `python ads/main.py`. This script will run the anomaly detection pipeline and subsequent analyses: train the anomaly detection model, calculate percent replicating, train mechanism of action (MoA) and generate SHAP-based anomaly explanations.
+6. Configure parameters through .yaml file in `/configs`
+5. Run `python main.py --flow train --config configs/experiment.yaml`. This script will train the anomaly detection model.
+6. Run `python main.py --flow eval`. This script will run the subsequent analyses: train the anomaly detection model, calculate percent replicating, train mechanism of action (MoA) and generate SHAP-based anomaly explanations.
 6. Run additional notebooks under 'notebooks/' to generate figures and tables.
 
 
 ## Repository Structure
 
+```
+AnomalyDetectionScreening/
+├── README.md           # This file
+├── main.py           # main_script
+├── requirement.txt            # Package requirements
+├── configs/            # directory for .yaml configuration files
+├── src/  # Main package
+    ├── __init__.py     # Package initialization
+    ├── ProfilingAnomalyDetector.py      #  anomaly detection module implementation
+    ├── data/           #  directory for data related ops
+    ├── model/          #  directory for model related ops
+    ├── eval/           #  directory for eval related ops
+    ├── utils/          #  directory for utils
+    └── ProfilingAnomalyDetector.py      #  anomaly detection module implementation
+    
+    
+```
 │
 ├── ads/
 │   ├── utils/
