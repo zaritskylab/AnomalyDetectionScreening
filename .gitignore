@@ -16,7 +16,8 @@ notebooks/interpret_MoAs copy.ipynb
 notebooks/calc_mAP.ipynb
 notebooks/shap_analysis.ipynb
 **/__pycache__/
-.vscode/
+.vscode/*
+.idea/*
 **/.ipynb_checkpoints/
 sample_data/CellPainting/replicate_level_cp_augmented.csv
 sample_data/CellPainting/replicate_level_cp_augmented.csv.gz
