@@ -31,17 +31,20 @@ For installation of AWS CLI, see https://docs.aws.amazon.com/cli/v1/userguide/in
 
 ```
 AnomalyDetectionScreening/
-├── README.md           # This file
-├── main.py           # main_script
-├── requirement.txt            # Package requirements
-├── configs/            # directory for .yaml configuration files
-├── src/  # Main package
-    ├── __init__.py     # Package initialization
-    ├── data/           #  directory for data related ops
-    ├── model/          #  directory for model related ops
-    ├── eval/           #  directory for eval related ops
-    ├── utils/          #  directory for utils
-    └── ProfilingAnomalyDetector.py      #  anomaly detection module implementation
+├── README.md                   # This file
+├── main.py                     # main_script
+├── requirement.txt             # Package requirements
+├── configs/                    # directory for .yaml configuration files
+├── notebooks/                  # directory for .yaml configuration files
+    ├── analyze_moa_res.ipynb               # Visualize and compare MoA results 
+    └── interpret_feature_dists.ipynb       #  Analysis of top features by compound \ MoA 
+├── src/                        # Main package
+    ├── __init__.py                         # Package initialization
+    ├── data/                               #  directory for data related ops
+    ├── model/                              #  directory for model related ops
+    ├── eval/                               #  directory for eval related ops
+    ├── utils/                              #  directory for utils
+    └── ProfilingAnomalyDetector.py         #  anomaly detection module implementation
     
 ```
 
