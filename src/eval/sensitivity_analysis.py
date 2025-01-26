@@ -401,8 +401,6 @@ for dataset in datasets:
     hue_order = reps.keys()
     features = reps['Anomaly'].columns[reps['Anomaly'].columns.str.contains("Cells_|Cytoplasm_|Nuclei_")].tolist()
 
-
-
     if gv.DS_INFO_DICT[dataset]['has_moa']:
         moa_col = gv.DS_INFO_DICT[dataset]['CellPainting']['moa_col']
     cpd_col = gv.DS_INFO_DICT[dataset]['CellPainting']['cpd_col']

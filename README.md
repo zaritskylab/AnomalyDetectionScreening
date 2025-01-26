@@ -24,8 +24,7 @@ For installation of AWS CLI, see https://docs.aws.amazon.com/cli/v1/userguide/in
 5. Install the required packages: `pip install -r requirements.txt`
 6. Configure parameters through .yaml file in `/configs`
 5. Run `python main.py --flow train --config configs/experiment.yaml`. This script will train the anomaly detection model.
-6. Run `python main.py --flow eval`. This script will run the subsequent analyses: train the anomaly detection model, calculate percent replicating, train mechanism of action (MoA) and generate SHAP-based anomaly explanations.
-6. Run additional notebooks under 'notebooks/' to generate figures and tables.
+6. Run `python main.py --flow eval`. This script will run the subsequent analyses: calculate percent replicating, train mechanism of action (MoA) and generate SHAP-based anomaly explanations.
 
 
 ## Repository Structure
@@ -38,96 +37,14 @@ AnomalyDetectionScreening/
 ├── configs/            # directory for .yaml configuration files
 ├── src/  # Main package
     ├── __init__.py     # Package initialization
-    ├── ProfilingAnomalyDetector.py      #  anomaly detection module implementation
     ├── data/           #  directory for data related ops
     ├── model/          #  directory for model related ops
     ├── eval/           #  directory for eval related ops
     ├── utils/          #  directory for utils
     └── ProfilingAnomalyDetector.py      #  anomaly detection module implementation
     
-    
-```
-│
-├── ads/
-│   ├── utils/
-│   │   ├── general.py
-│   │   ├── configuration.py
-│   │   └── logger.py
-│   ├── pipeline/
-│   │   ├── anomaly_pipeline.py
-│   │   └── eval_pipeline.py
-│   │── data/
-│   │   ├── data_processing.py
-|   │   └── data_utils.py
-│   └── eval/
-│       ├── calc_reproducibility.py
-│       ├── classify_moa.py
-│       |── shap_anomalies.py
-|       └── eval_utils.py
-│
-├── configs/
-│   ├── default.yaml
-│   └── experiment.yaml
-│
-├── requirements.txt
-├── main.py
-└── README.md'''
-
-
-## Usage
-
-```python
-
-from torch.utils.data import DataLoader
-
-
-dataloaders = construct_dataloaders(data,
-                                    batch_size=32
-                                    features)
-
-# Initialize anomaly model
-anomaly_detector = ProfilingAnomalyDetector()
-anomaly_detector.fit(dataloaders, features)
-anomaly_detector.forward(dataloaders, configs.general.output_dir)
-
-save_path = os.path.join(configs.general.output_dir,  f'replicate_level_{MODALITY_STR[configs.data.modality]}_{configs.data.profile_type}_ae_diff')
-anomaly_detector.save_anomalies(data, 
-                                save_path = save_path)
-
-
-# Initialize the layer
-freq_dropout = FrequencyDropout(
-    p=0.1,                # dropout probability
-    preserve_energy=True, # maintain signal energy
-    preserve_dc=True     # retain DC component
-)
-
-# For uncertainty estimation
-model.eval()  # Keep dropout active for MC sampling
-predictions = []
-for _ in range(num_samples):
-    pred = model(input)  # Multiple forward passes
-    predictions.append(pred)
-uncertainty = torch.std(torch.stack(predictions), dim=0)
 ```
 
-## Repository Structure
-```
-frequency-dropout/
-├── README.md           # This file
-├── setup.py            # Package configuration
-├── frequency_dropout/  # Main package
-    ├── __init__.py    # Package initialization
-    └── module.py      # FrequencyDropout implementation
-```
-
-## Features
-
-- Frequency-domain dropout for uncertainty estimation
-- Optional energy preservation using Parseval's theorem
-- DC component preservation option
-- Support for 2D and 3D inputs
-- Compatible with Monte Carlo dropout inference
 
 ## Citation
 
