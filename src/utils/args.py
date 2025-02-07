@@ -47,6 +47,8 @@ class GeneralArguments:
     seed: Optional[int] = field(default=42, metadata={"help": "experiment seed"})
     gpus: Optional[int] = field(default=1, metadata={"help": "number of gpus to use"})
     base_dir: Optional[str] = field(default=BASE_DIR, metadata={"help": "base directory"})
+    output_dir: Optional[str] = field(default=f'{BASE_DIR}/anomaly_output', metadata={"help": "output directory"})
+    res_dir: Optional[str] = field(default=f'{BASE_DIR}/results', metadata={"help": "results directory"})
         # supported datasets =['CDRP-bio','CDRP', 'LINCS', 'LUAD', 'TAORF'])
     exp_num: Optional[int] = field(default=0, metadata={"help": "experiment number"})
     tune_ldims: Optional[bool] = field(default=False, metadata={"help": "if True, tune latent dims"})

@@ -74,10 +74,12 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Run profiling anomaly detection pipeline")
     
     # Add arguments corresponding to dataclass fields
-    parser.add_argument("--base_dir", type=str, help="Base directory for the project")
+    parser.add_argument("--base_dir", type=str, default=BASE_DIR, help="Base directory for the project")
+    parser.add_argument("--output_dir", type=str, help="Base directory for saving project output")
+    parser.add_argument("--res_dir", type=str, help="Base directory for saving experiment results")
     parser.add_argument("--exp_name", type=str, help="Experiment name")
     parser.add_argument("--config", type=str, default = 'configs/default_config.yaml',help="Path to the configuration file")
-    parser.add_argument("--flow", type=str, default = 'train',help="Flow of the experiment")
+    parser.add_argument("--flow", type=str, default = 'eval',help="Flow of the experiment")
     parser.add_argument("--debug_mode", action="store_true", help="Enable debug mode")
     parser.add_argument("--use_cache", action="store_true", help="upload data from cache")
     # parser.add_argument("--seed", type=int, default=42, help="Random seed for the experiment")
@@ -87,6 +89,7 @@ def parse_args():
     parser.add_argument("--run_all_datasets", type=bool, default=False, help="Run all datasets")
     parser.add_argument("--run_parallel", type=bool, default=False, help="Run multiple gpus")
     # Add more arguments as needed for other dataclasses
+
     args = parser.parse_args()
     return vars(args)  # Return as a dictionary for merging
 

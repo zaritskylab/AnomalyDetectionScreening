@@ -31,41 +31,34 @@ def load_configs(config_path: str) -> dict:
     
     return configs
 
-################################################################################
 
-def merge_cli_and_config(cli_args: dict, config: dict) -> None:
 
-    """ Merge command-line arguments into the configuration (CLI args take precedence)"""
-    config_keys = ['GeneralArguments', 'DataArguments', 'ModelArguments', 'EvalArguments', 'MoaArguments']
-    for config_key in config_keys:
-        for key, value in cli_args.items():
-            if value is not None:  # Override only if CLI argument is provided
-                keys = key.split('.')  # Support nested keys if needed
+def merge_cli_and_config(cli_args: dict, config: dict) -> argparse.Namespace:
+    """
+    Merge command-line arguments into the configuration (CLI args take precedence)
+    """
+    # First, create a copy of the config to avoid modifying the original
+    merged_config = config.copy()
 
-                if config_key in config:
-                    temp = config[config_key]
-                    for k in keys[:-1]:
-                        temp = temp.get(k, {})
-                    if keys[-1] in temp:
-                        temp[keys[-1]] = value
-                else:
-                    config[config_key] = {}
+    # Iterate through CLI arguments
+    for key, value in cli_args.items():
+        if value is not None:  # Only process if CLI argument was provided
+            # Check each config section
+            for config_key in ['GeneralArguments', 'DataArguments', 'ModelArguments', 'EvalArguments', 'MoaArguments']:
+                if config_key in merged_config:
+                    # If the key exists in the current section's keys, update it
+                    if key in merged_config[config_key]:
+                        merged_config[config_key][key] = value
+                        break  # Stop once we've found and updated the matching key
 
-    # Instantiate dataclasses with merged config
-    general_args = GeneralArguments(**config['GeneralArguments'])
-    data_args = DataArguments(**config['DataArguments'])
-    model_args = ModelArguments(**config['ModelArguments'])
-    eval_args = EvalArguments(**config['EvalArguments'])
-    moa_args = MoaArguments(**config['MoaArguments'])
-    
-    configs = argparse.Namespace(**{
-        'general': GeneralArguments(**config['GeneralArguments']),
-        'data':  DataArguments(**config['DataArguments']),
-        'model': ModelArguments(**config['ModelArguments']), 
-        'eval':EvalArguments(**config['EvalArguments']),
-        'moa':  MoaArguments(**config['MoaArguments'])
-    })
-
+    # Create namespace with updated configurations
+    configs = argparse.Namespace(
+        general=GeneralArguments(**merged_config['GeneralArguments']),
+        data=DataArguments(**merged_config['DataArguments']),
+        model=ModelArguments(**merged_config['ModelArguments']),
+        eval=EvalArguments(**merged_config['EvalArguments']),
+        moa=MoaArguments(**merged_config['MoaArguments'])
+    )
 
     return configs
 
@@ -73,65 +66,26 @@ def merge_cli_and_config(cli_args: dict, config: dict) -> None:
 
 def set_configs(cli_args):
 
-    # # Revise and prepare configurations
-    # configs['general']['exp_name'] = revise_exp_name(configs)
-    # set_paths(configs)
-    # set_seed(configs['general']['seed'])
-
-    # # Setup logger
-    # set_logger(configs)
-
     
     configs = load_configs(cli_args["config"])
     if cli_args is not None:
         configs = merge_cli_and_config(cli_args, configs)
 
-    # # Instantiate dataclasses with merged config
-    # general_args = GeneralArguments(**config['general'])
-    # data_args = DataArguments(**config['data'])
-    # model_args = ModelArguments(**config['model'])
-    # eval_args = EvalArguments(**config['eval'])
+    if configs.general.output_dir is not None:
+        configs.general.output_dir = f"{configs.general.output_dir}/{configs.general.dataset}/{configs.data.modality}/{configs.general.exp_name}/"
+    else:
+        configs.general.output_dir = f"{configs.general.base_dir}/anomaly_output/{configs.general.dataset}/{configs.data.modality}/{configs.general.exp_name}/"
 
-    # parser = transformers.HfArgumentParser((GeneralArguments, DataArguments,ModelArguments, EvalArguments,MoaArguments))
-    # general_args, data_args,model_args, eval_args, moa_args = parser.parse_args_into_dataclasses()
-    
-    # configs = argparse.Namespace(**{
-    #     'general': general_args,
-    #     'model': model_args,
-    #     'data': data_args,
-    #     'eval':eval_args,
-    #     'moa':moa_args
-    # })
-    # if len(exp_name)>0:
-        # configs.general.exp_name = exp_name
-    # exp_name = revise_exp_name(configs)
-    # configs.general.exp_name = exp_name
-    configs.general.output_dir = f"{configs.general.base_dir}/anomaly_output/{configs.general.dataset}/{configs.data.modality}/{configs.general.exp_name}/"
-
+    if configs.general.res_dir is not None:
+        configs.general.res_dir = f"{configs.general.res_dir}/{configs.general.dataset}/{configs.data.modality}/{configs.general.exp_name}/"
+    else:
+        configs.general.res_dir = f"{configs.general.base_dir}/results/{configs.general.dataset}/{configs.data.modality}/{configs.general.exp_name}/"
     set_paths(configs)
     set_seed(configs.general.seed)
     set_logger(configs)
 
     save_yaml_config(configs, os.path.join(configs.general.output_dir, f'configs_{configs.general.flow}.yaml'))
     return configs
-
-################################################################################
-
-# def revise_exp_name(configs):
-#     if configs.model.tune_hyperparams:
-#         configs.general.exp_name += f'_{ABRVS["tune"]}'
-#     if configs.data.norm_method == 'mad_robustize':
-#         configs.general.exp_name += f'_{ABRVS[configs.data.norm_method]}'
-#     # if configs.model.l2_lambda>0.01:
-#         # configs.general.exp_name += f'_l2_{configs.model.l2_lambda}'
-#     if configs.model.deep_decoder:
-#         configs.general.exp_name += f'_dd'
-        
-#     if configs.model.encoder_type == 'shallow':
-#         configs.general.exp_name += f'_se'
-#     elif configs.model.encoder_type == 'deep':
-#         configs.general.exp_name += f'_de'
-#     return configs.general.exp_name 
 
 ################################################################################
 
@@ -164,44 +118,6 @@ def save_yaml_config(config, file_path: str):
     with open(file_path, 'w') as file:
         yaml.dump(config, file, default_flow_style=False)
 
-
-################################################################################
-
-# def save_configs(configs):
-#     config_path = os.path.join(configs.general.output_dir,'args.pkl')
-    
-#     with open(config_path, 'wb') as f:
-#         pickle.dump(configs, f)
-    
-#     # save text file with all params    
-#     with open(os.path.join(configs.general.output_dir, 'params.txt'), 'w') as f:
-#         # skip line for each parameter
-#         for k,v in configs.__dict__.items():
-#             f.write(f'{k}:\n')
-
-#             for k2,v2 in v.__dict__.items():
-#                 # add indetation for each sub-parameter
-#                 f.write(f'     {k2}: {v2}\n')
-
-
-################################################################################
-
-# def get_configs(exp_dir):
-#     # path = get_cp_dir(DATASET_ROOT_DIR,DS_INFO_DICT[DATASET]['name'],exp_name)
-#     config_path = os.path.join(exp_dir,'args.pkl')
-    
-#     if os.path.exists(config_path):  
-#         parser = ArgumentParser()
-
-#         args, unknown = parser.parse_known_args()
-#         # args = parser.parse_args()  
-
-#         with open(config_path, 'rb') as f:
-#             return pickle.load(f)
-        
-#     else:
-#         return None
-    
 
 ################################################################################
 
@@ -313,7 +229,4 @@ def output_path(configs):
 
 
 def set_seed(seed):
-    # torch.manual_seed(seed)
-    # np.random.seed(seed)
-    # random.seed(seed)
     seed_everything(seed)

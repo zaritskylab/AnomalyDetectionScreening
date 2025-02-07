@@ -1,12 +1,14 @@
 GeneralArguments:
   # exp_name: "{date.today().strftime('%d_%m')}"
-  exp_name: "test_code_refactor"
+  exp_name: "default_exp"
   dataset: "CDRP-bio"
   flow: "eval" # "data", "train", "eval"
   debug_mode: false
   seed: 42
   gpus: 1
-  base_dir: "/Users/alonshp/rosetta-data"
+  base_dir: null
+  output_dir:  null
+  res_dir:  null
   overwrite_experiment: false
   run_parallel: false
   slice_id: null
