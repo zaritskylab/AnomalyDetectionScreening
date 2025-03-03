@@ -74,7 +74,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Run profiling anomaly detection pipeline")
     
     # Add arguments corresponding to dataclass fields
-    parser.add_argument("--base_dir", type=str, default=BASE_DIR, help="Base directory for the project")
+    parser.add_argument("--base_dir", type=str, help="Base directory for the project")
     parser.add_argument("--output_dir", type=str, help="Base directory for saving project output")
     parser.add_argument("--res_dir", type=str, help="Base directory for saving experiment results")
     parser.add_argument("--exp_name", type=str, help="Experiment name")
