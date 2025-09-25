@@ -109,4 +109,4 @@ If you use this implementation in your research, please cite:
 
 ## License
 
-MIT
+This repository (data, documentation, and figures) is intended for academic and research use, and is licensed under CC BY-NC 4.0. See [LICENSE](LICENSE) for details.
